@@ -253,13 +253,14 @@ IRCEndpointBuilder IcebergCatalog::GetBaseUrl() const {
 unique_ptr<SecretEntry> IcebergCatalog::GetStorageSecret(ClientContext &context, const string &secret_name) {
 	auto transaction = CatalogTransaction::GetSystemCatalogTransaction(context);
 
-	case_insensitive_set_t accepted_secret_types {"s3", "aws"};
+	vector<string> accepted_secret_types {"s3", "aws"};
 
 	if (!secret_name.empty()) {
 		auto secret_entry = context.db->GetSecretManager().GetSecretByName(transaction, secret_name);
 		if (secret_entry) {
 			auto secret_type = secret_entry->secret->GetType();
-			if (accepted_secret_types.count(secret_type.GetIdentifierName())) {
+			auto matching_secret = std::find(accepted_secret_types.begin(), accepted_secret_types.end(), secret_type);
+			if (matching_secret != accepted_secret_types.end()) {
 				return secret_entry;
 			}
 			throw InvalidConfigurationException(
@@ -271,19 +272,37 @@ unique_ptr<SecretEntry> IcebergCatalog::GetStorageSecret(ClientContext &context,
 		    "No secret by the name of '%s' could be found, consider changing the 'secret'", secret_name);
 	}
 
-	for (auto &type : accepted_secret_types) {
-		if (secret_name.empty()) {
-			//! Lookup the default secret for this type
-			auto secret_entry =
-			    context.db->GetSecretManager().GetSecretByName(transaction, StringUtil::Format("__default_%s", type));
-			if (secret_entry) {
-				return secret_entry;
-			}
+	// Check explicit defaults of both types before considering automatic fallback credentials.
+	for (const auto &type : accepted_secret_types) {
+		auto secret_entry =
+		    context.db->GetSecretManager().GetSecretByName(transaction, StringUtil::Format("__default_%s", type));
+		if (secret_entry) {
+			return secret_entry;
 		}
+	}
+
+	SecretMatch best_match;
+	for (const auto &type : accepted_secret_types) {
 		auto secret_match = context.db->GetSecretManager().LookupSecret(transaction, type + "://", type);
-		if (secret_match.HasMatch()) {
-			return std::move(secret_match.secret_entry);
+		if (!secret_match.HasMatch()) {
+			//! Didn't result in a match at all
+			continue;
 		}
+		if (secret_match.score < best_match.score) {
+			//! Lower score, skip
+			continue;
+		}
+		if (secret_match.score != best_match.score) {
+			//! Higher score, replace the current best
+			best_match = secret_match;
+			continue;
+		}
+		if (secret_match.GetSecret().GetName() < best_match.GetSecret().GetName()) {
+			best_match = secret_match;
+		}
+	}
+	if (best_match.HasMatch()) {
+		return std::move(best_match.secret_entry);
 	}
 	throw InvalidConfigurationException("Could not find a valid storage secret (s3 or aws)");
 }
