@@ -576,6 +576,12 @@
       ]
     },
     {
+      "reason": "Tests DuckDB undo-buffer and index cleanup with fixed memory limits; Iceberg has different commit semantics and S3 metadata writes exceed the setup memory budget",
+      "paths": [
+        "test/sql/transactions/test_commit_cleanup_oom_index_retry.test"
+      ]
+    },
+    {
       "reason": "Stats / memory_usage / transitive filter output reflects iceberg storage",
       "paths": [
         "test/sql/delete/in_memory_bulk_delete.test_slow",
