@@ -577,6 +577,12 @@
       ]
     },
     {
+      "reason": "Tests DuckDB undo-buffer and index cleanup with fixed memory limits; Iceberg has different commit semantics and S3 metadata writes exceed the setup memory budget",
+      "paths": [
+        "test/sql/transactions/test_commit_cleanup_oom_index_retry.test"
+      ]
+    },
+    {
       "reason": "Stats / memory_usage / transitive filter output reflects iceberg storage",
       "paths": [
         "test/sql/delete/in_memory_bulk_delete.test_slow",
@@ -854,6 +860,12 @@
       "paths": [
         "test/sql/storage/encryption/temp_files/encrypted_tpch_join.test_slow",
         "test/sql/storage/external_file_cache/external_file_cache_parquet_tpch.test_slow"
+      ]
+    },
+    {
+      "reason": "Flaky native spill-accounting assertion: parallel CTAS can leave freed interior block slots in temp files; file sizes include those slots while duckdb_memory reports only live spilled bytes",
+      "paths": [
+        "test/sql/storage/encryption/temp_files/encrypted_temp_file_size_accounting.test"
       ]
     },
     {

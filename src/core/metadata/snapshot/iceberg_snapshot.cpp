@@ -93,6 +93,7 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 		throw InvalidConfigurationException("Snapshot must contain either 'manifest-list' or 'manifests'");
 	}
 	ret.metrics = IcebergSnapshotMetrics(snapshot.summary.additional_properties);
+	ret.summary = snapshot.summary.additional_properties;
 
 	if (snapshot.parent_snapshot_id) {
 		ret.parent_snapshot_id = *snapshot.parent_snapshot_id;
