@@ -9,9 +9,6 @@
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/parser/tableref/table_function_ref.hpp"
 #include "duckdb/parser/expression/constant_expression.hpp"
-#include "duckdb/parser/expression/function_expression.hpp"
-#include "duckdb/function/scalar/struct_functions.hpp"
-#include "duckdb/planner/expression_binder/constant_binder.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_operator_expression.hpp"
@@ -286,47 +283,62 @@ static void CollectFieldIds(const vector<MultiFileColumnDefinition> &columns, un
 	}
 }
 
-//! Return whether a non-NULL partition value proves that this field (and its ancestors) is non-NULL.
-static bool ApplyPartitionDefault(const unordered_map<int32_t, Value> &constants,
-                                  const unordered_set<int32_t> &local_ids, MultiFileColumnDefinition &column) {
-	auto field_id = column.GetIdentifierFieldId();
-	auto value = constants.find(field_id);
-	if (value != constants.end()) {
-		if (!local_ids.count(field_id)) {
-			column.default_expression = ConstantExpression::FromValue(value->second);
-		}
-		return !value->second.IsNull();
-	}
-	if (column.type.id() != LogicalTypeId::STRUCT) {
-		return false;
-	}
-	bool has_value = false;
-	for (auto &child : column.children) {
-		has_value |= ApplyPartitionDefault(constants, local_ids, child);
-	}
-	if (has_value && !local_ids.count(field_id)) {
-		// The whole struct is absent. Its original NULL default would hide the partition values
-		// installed on its children, so construct it using their per-file defaults.
-		vector<unique_ptr<ParsedExpression>> children;
-		for (auto &child : column.children) {
-			auto expression = child.default_expression->Copy();
-			expression->SetAlias(child.name);
-			children.push_back(std::move(expression));
-		}
-		column.default_expression = make_uniq<FunctionExpression>(Identifier(StructPackFun::Name), std::move(children));
-	}
-	return has_value;
+static Value GetSchemaDefault(const IcebergTableMetadataSchemas &schemas, const MultiFileColumnDefinition &column) {
+	auto definition = schemas.FindColumnByFieldId(column.GetIdentifierFieldId());
+	auto value = definition ? definition->GetInitialDefault() : Value(column.type);
+	return value.type() == column.type ? value : value.DefaultCastAs(column.type);
 }
 
-static optional<Value> ProjectPartitionDefault(ClientContext &context, const MultiFileColumnDefinition &column,
-                                               const ColumnIndex &index) {
-	auto binder = Binder::CreateBinder(context);
-	binder->SetCanContainNulls(true);
-	ConstantBinder constant_binder(*binder, context, "partition default");
-	auto expression = column.default_expression->Copy();
-	auto type = column.type;
-	auto bound = constant_binder.Bind(expression, &type);
-	auto value = ExpressionExecutor::EvaluateScalar(context, *bound, true);
+//! The value of a field that is missing from the file, when partition values determine it: the field's own
+//! partition value, or a struct built from its children's partition values and schema defaults. A struct is only
+//! built if a non-NULL partition value proves it is non-NULL; otherwise the field keeps its schema default.
+//! Values are built directly so that reading a file doesn't bind a default expression.
+static optional<Value> GetPartitionDefault(const unordered_map<int32_t, Value> &constants,
+                                           const IcebergTableMetadataSchemas &schemas,
+                                           const MultiFileColumnDefinition &column) {
+	auto value = constants.find(column.GetIdentifierFieldId());
+	if (value != constants.end()) {
+		return value->second;
+	}
+	if (column.type.id() != LogicalTypeId::STRUCT) {
+		return nullopt;
+	}
+	bool has_value = false;
+	vector<Value> children;
+	children.reserve(column.children.size());
+	for (auto &child : column.children) {
+		auto child_value = GetPartitionDefault(constants, schemas, child);
+		if (child_value) {
+			has_value |= !child_value->IsNull();
+			children.push_back(std::move(*child_value));
+		} else {
+			children.push_back(GetSchemaDefault(schemas, child));
+		}
+	}
+	if (!has_value) {
+		return nullopt;
+	}
+	return Value::STRUCT(column.type, std::move(children));
+}
+
+//! For a struct present in the file, give its missing fields their partition-derived defaults.
+static void ApplyNestedPartitionDefaults(const unordered_map<int32_t, Value> &constants,
+                                         const IcebergTableMetadataSchemas &schemas,
+                                         const unordered_set<int32_t> &local_ids, MultiFileColumnDefinition &column) {
+	for (auto &child : column.children) {
+		if (local_ids.count(child.GetIdentifierFieldId())) {
+			ApplyNestedPartitionDefaults(constants, schemas, local_ids, child);
+			continue;
+		}
+		auto value = GetPartitionDefault(constants, schemas, child);
+		if (value) {
+			child.default_expression = ConstantExpression::FromValue(*value);
+		}
+	}
+}
+
+//! Narrow a value to the field selected by a pushed-down struct extraction.
+static optional<Value> ProjectValue(Value value, const ColumnIndex &index) {
 	optional_ptr<const ColumnIndex> current = index;
 	while (current->IsPushdownExtract()) {
 		current = current->GetChildIndex(0);
@@ -345,7 +357,7 @@ void IcebergMultiFileReader::ApplyPartitionConstants(const unordered_map<int32_t
                                                      MultiFileReaderData &reader_data,
                                                      vector<MultiFileColumnDefinition> &scan_columns,
                                                      const vector<ColumnIndex> &scan_column_ids,
-                                                     ClientContext &context) {
+                                                     const IcebergTableMetadataSchemas &schemas) {
 	if (constants.empty()) {
 		return;
 	}
@@ -358,23 +370,45 @@ void IcebergMultiFileReader::ApplyPartitionConstants(const unordered_map<int32_t
 			continue;
 		}
 		auto &column = scan_columns[id.GetPrimaryIndex()];
-		if (visited.insert(id.GetPrimaryIndex()).second) {
-			ApplyPartitionDefault(constants, local_ids, column);
-		}
-		// The mapper uses the default of the first missing field. For a pushed-down extraction
-		// through a missing struct, project that default to the scan's result type.
-		optional_ptr<const MultiFileColumnDefinition> current_column = column;
-		optional_ptr<const ColumnIndex> current_index = id;
-		while (current_index->IsPushdownExtract() && current_column->type.id() == LogicalTypeId::STRUCT) {
-			if (!local_ids.count(current_column->GetIdentifierFieldId())) {
-				auto value = ProjectPartitionDefault(context, *current_column, *current_index);
-				if (value) {
-					reader_data.constant_map.Add(MultiFileGlobalIndex(i), *value);
-				}
+		// Follow a pushed-down extraction to the first field missing from the file, whose default the mapper reads.
+		optional_ptr<MultiFileColumnDefinition> missing = column;
+		optional_ptr<const ColumnIndex> index = id;
+		while (missing && local_ids.count(missing->GetIdentifierFieldId())) {
+			if (!index->IsPushdownExtract() || missing->type.id() != LogicalTypeId::STRUCT) {
+				missing = nullptr;
 				break;
 			}
-			current_index = current_index->GetChildIndex(0);
-			current_column = current_column->children[current_index->GetPrimaryIndex()];
+			index = index->GetChildIndex(0);
+			missing = missing->children[index->GetPrimaryIndex()];
+		}
+		if (!missing) {
+			if (visited.insert(id.GetPrimaryIndex()).second) {
+				ApplyNestedPartitionDefaults(constants, schemas, local_ids, column);
+			}
+			continue;
+		}
+		auto value = GetPartitionDefault(constants, schemas, *missing);
+		if (!index->IsPushdownExtract()) {
+			if (!value) {
+				continue;
+			}
+			if (missing.get() == &column) {
+				reader_data.constant_map.Add(MultiFileGlobalIndex(i), std::move(*value));
+			} else {
+				// Below a struct that is in the file, the mapper must apply the default to keep that struct's NULLs.
+				missing->default_expression = ConstantExpression::FromValue(*value);
+			}
+			continue;
+		}
+		if (!value) {
+			// The mapper doesn't narrow a missing struct's default to a pushed-down field, so project it here.
+			value = GetSchemaDefault(schemas, *missing);
+		}
+		auto projected = ProjectValue(*value, *index);
+		if (projected) {
+			reader_data.constant_map.Add(MultiFileGlobalIndex(i), std::move(*projected));
+		} else {
+			missing->default_expression = ConstantExpression::FromValue(*value);
 		}
 	}
 }
@@ -430,7 +464,7 @@ ReaderInitializeType IcebergMultiFileReader::InitializeTaskReader(
 			ApplyFieldMapping(local_column, mappings, root.field_mapping_indexes, context);
 		}
 	}
-	ApplyPartitionConstants(partition_constants, reader_data, scan_columns, scan_column_ids, context);
+	ApplyPartitionConstants(partition_constants, reader_data, scan_columns, scan_column_ids, schemas);
 
 	vector<bool> accelerated_files;
 	Value fast_filter_setting;
