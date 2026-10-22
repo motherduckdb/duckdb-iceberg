@@ -381,6 +381,11 @@ IcebergTableMetadata::IcebergTableMetadata(IcebergTableMetadataSchemas schemas) 
 }
 
 IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_objects::TableMetadata &table_metadata) {
+	if (table_metadata.format_version < 1) {
+		throw InvalidConfigurationException(
+		    "'format-version' %d in the metadata.json file is not a valid Iceberg format version",
+		    table_metadata.format_version);
+	}
 	if (table_metadata.format_version > MAX_ICEBERG_FORMAT_VERSION) {
 		throw NotImplementedException("Iceberg format-version %d is not supported, the highest supported version is %d",
 		                              table_metadata.format_version, MAX_ICEBERG_FORMAT_VERSION);
@@ -395,7 +400,10 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	unordered_map<int32_t, shared_ptr<IcebergTableSchema>> schemas;
 	if (table_metadata.schemas) {
 		for (auto &schema : *table_metadata.schemas) {
-			D_ASSERT(schema.object_1.schema_id);
+			if (!schema.object_1.schema_id) {
+				throw InvalidConfigurationException(
+				    "'schema-id' field is missing from a schema in the metadata.json file");
+			}
 			schemas.emplace(*schema.object_1.schema_id, IcebergTableSchema::ParseSchema(schema));
 		}
 	} else if (table_metadata.format_version == 1 && table_metadata.schema) {
@@ -408,10 +416,14 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	IcebergTableMetadata res(IcebergTableMetadataSchemas(std::move(schemas)));
 
 	res.table_uuid = table_metadata.table_uuid;
-	D_ASSERT(table_metadata.location);
+	if (!table_metadata.location) {
+		throw InvalidConfigurationException("'location' field is missing from the metadata.json file");
+	}
 	res.location = *table_metadata.location;
 	res.iceberg_version = table_metadata.format_version;
-	D_ASSERT(table_metadata.last_updated_ms);
+	if (!table_metadata.last_updated_ms) {
+		throw InvalidConfigurationException("'last-updated-ms' field is missing from the metadata.json file");
+	}
 	res.last_updated_ms = timestamp_ms_t(*table_metadata.last_updated_ms);
 
 	if (table_metadata.snapshots) {
@@ -434,7 +446,10 @@ IcebergTableMetadata IcebergTableMetadata::FromTableMetadata(const rest_api_obje
 	}
 	if (table_metadata.partition_specs) {
 		for (auto &spec : *table_metadata.partition_specs) {
-			D_ASSERT(spec.spec_id);
+			if (!spec.spec_id) {
+				throw InvalidConfigurationException(
+				    "'spec-id' field is missing from a partition spec in the metadata.json file");
+			}
 			res.partition_specs.emplace(*spec.spec_id, IcebergPartitionSpec::ParseFromJson(spec, res.iceberg_version));
 		}
 	} else if (res.iceberg_version == 1 && table_metadata.partition_spec) {
