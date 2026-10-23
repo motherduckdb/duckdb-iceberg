@@ -77,6 +77,11 @@ bool BucketQualifies(const RewriteBucket &bucket, const RewriteDataFilesPlanInpu
 	if (input.rewrite_all) {
 		return true;
 	}
+	//! Spark SizeBasedFileRewriter.tooMuchContent: one file above max-file-size-bytes
+	//! is rewritten on its own so it can be split. A lone undersized file stays put.
+	if (bucket.eligible_count == 1 && bucket.eligible_bytes > input.max_file_size_bytes.value()) {
+		return true;
+	}
 	//! Spark SizeBasedFileRewriter: rewrite when the group has enough files,
 	//! or at least two files whose total size already meets the target.
 	if (bucket.eligible_count >= input.min_input_files) {
