@@ -11,8 +11,7 @@ class IcebergSchemaEntry;
 
 struct IcebergPendingSchemaCreate {
 	shared_ptr<IcebergSchemaEntry> entry;
-	//! whether an existing namespace is acceptable (IF NOT EXISTS)
-	bool ignore_conflict;
+	OnCreateConflict on_conflict;
 };
 
 //! Schemas created in a transaction, whose namespaces are only created on the server at commit
@@ -48,14 +47,13 @@ public:
 	void Add(const string &name, shared_ptr<IcebergSchemaEntry> entry, OnCreateConflict on_conflict) {
 		D_ASSERT(!Contains(name));
 		D_ASSERT(on_conflict != OnCreateConflict::REPLACE_ON_CONFLICT);
-		schemas.emplace(
-		    name, IcebergPendingSchemaCreate {std::move(entry), on_conflict == OnCreateConflict::IGNORE_ON_CONFLICT});
+		schemas.emplace(name, IcebergPendingSchemaCreate {std::move(entry), on_conflict});
 	}
 
 	void OnNamespaceExists(const string &name) const {
 		auto entry = schemas.find(name);
 		D_ASSERT(entry != schemas.end());
-		if (!entry->second.ignore_conflict) {
+		if (entry->second.on_conflict != OnCreateConflict::IGNORE_ON_CONFLICT) {
 			ThrowAlreadyExists(name);
 		}
 	}

@@ -78,6 +78,7 @@ begin
 statement ok con1
 CREATE SCHEMA my_datalake.concurrent_schema;
 
+# con2 is in autocommit mode, so this commits before con1's commit
 statement ok con2
 CREATE SCHEMA other_datalake.concurrent_schema;
 
