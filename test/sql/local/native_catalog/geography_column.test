@@ -14,14 +14,16 @@ statement ok
 CREATE TABLE my_datalake.default.geography_table (
 	id BIGINT,
 	g GEOMETRY('OGC:CRS84'),
-	s STRUCT(a INTEGER, g GEOMETRY('OGC:CRS84'))
+	s STRUCT(a INTEGER, g GEOMETRY('OGC:CRS84')),
+	l GEOMETRY('OGC:CRS84')[],
+	m MAP(VARCHAR, GEOMETRY('OGC:CRS84'))
 ) WITH ('format-version' = '3');
 
 statement ok
 INSERT INTO my_datalake.default.geography_table VALUES
-	(1, 'POINT (1 2)', {'a': 10, 'g': 'POINT (1 2)'}),
-	(2, 'POINT (3 4)', {'a': 20, 'g': 'POINT (3 4)'}),
-	(3, NULL, NULL);
+	(1, 'POINT (1 2)', {'a': 10, 'g': 'POINT (1 2)'}, ['POINT (1 2)'], MAP {'k': 'POINT (1 2)'}),
+	(2, 'POINT (3 4)', {'a': 20, 'g': 'POINT (3 4)'}, [], MAP {}),
+	(3, NULL, NULL, NULL, NULL);
 
 statement ok
 SET VARIABLE table_metadata = (
@@ -45,6 +47,8 @@ SELECT column_name, column_type FROM (DESCRIBE my_datalake.default.geography_tab
 id	BIGINT
 g	ICEBERG_GEOGRAPHY(OGC:CRS84, spherical)
 s	STRUCT(a INTEGER, g ICEBERG_GEOGRAPHY(OGC:CRS84, spherical))
+l	ICEBERG_GEOGRAPHY(OGC:CRS84, spherical)[]
+m	MAP(VARCHAR, ICEBERG_GEOGRAPHY(OGC:CRS84, spherical))
 
 query I
 SELECT count(*) FROM my_datalake.default.geography_table;
@@ -109,6 +113,28 @@ SELECT s.g FROM my_datalake.default.geography_table;
 ----
 Not implemented Error: Reading geography column "s.g" is not supported
 
+# CTAS of the other columns works
+statement ok
+CREATE TABLE my_datalake.default.geography_table_copy AS SELECT id, s.a FROM my_datalake.default.geography_table;
+
+query II
+SELECT * FROM my_datalake.default.geography_table_copy ORDER BY id;
+----
+1	10
+2	20
+3	NULL
+
+# Lists and maps that hold geography can't be read at all
+statement error
+SELECT len(l) FROM my_datalake.default.geography_table;
+----
+Not implemented Error: Reading geography column "l" is not supported
+
+statement error
+SELECT map_keys(m) FROM my_datalake.default.geography_table;
+----
+Not implemented Error: Reading geography column "m" is not supported
+
 statement error
 INSERT INTO my_datalake.default.geography_table (id) VALUES (4);
 ----
@@ -133,13 +159,15 @@ SELECT id FROM my_datalake.default.geography_table ORDER BY id;
 statement ok
 ALTER TABLE my_datalake.default.geography_table ADD COLUMN c INTEGER;
 
-query II
+query IIII
 SELECT
 	json_extract_string(body, '$.metadata.schemas[-1].fields[1].type'),
-	json_extract_string(body, '$.metadata.schemas[-1].fields[2].type.fields[1].type')
+	json_extract_string(body, '$.metadata.schemas[-1].fields[2].type.fields[1].type'),
+	json_extract_string(body, '$.metadata.schemas[-1].fields[3].type.element'),
+	json_extract_string(body, '$.metadata.schemas[-1].fields[4].type.value')
 FROM iceberg_test_catalog_request('GET', '/v1/namespaces/default/tables/geography_table', NULL);
 ----
-geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)
+geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)
 
 # DuckDB can't write geography values, so the type can't be declared
 statement error
