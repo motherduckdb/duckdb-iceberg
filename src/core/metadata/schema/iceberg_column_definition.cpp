@@ -8,6 +8,7 @@
 #include "duckdb/function/scalar/generic_functions.hpp"
 #include "common/iceberg_default.hpp"
 #include "common/iceberg_fixed_type.hpp"
+#include "common/iceberg_geography_type.hpp"
 
 namespace duckdb {
 
@@ -172,7 +173,7 @@ LogicalType IcebergColumnDefinition::ParsePrimitiveTypeString(const string &type
 		throw InvalidConfigurationException("Invalid geometry type format: %s", type_str);
 	}
 	if (StringUtil::StartsWith(type_str, "geography")) {
-		throw NotImplementedException("Geography support");
+		return IcebergGeographyType::Get(type_str);
 	}
 	throw InvalidConfigurationException("Unrecognized primitive type: %s", type_str);
 }

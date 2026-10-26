@@ -18,6 +18,7 @@
 #include "duckdb/planner/expression_iterator.hpp"
 #include "duckdb/planner/logical_operator_visitor.hpp"
 #include "common/iceberg_fixed_type.hpp"
+#include "common/iceberg_geography_type.hpp"
 
 namespace duckdb {
 
@@ -76,6 +77,7 @@ void IcebergPlanner::PostBind(PlannerExtensionInput &input, BoundStatement &stat
 		IcebergPlannerRoutine routine;
 		routine.VisitOperator(*statement.plan);
 		IcebergFixedType::RejectOutsideIceberg(input.context, *statement.plan);
+		IcebergGeographyType::RejectDeclared(input.context, *statement.plan);
 	}
 }
 

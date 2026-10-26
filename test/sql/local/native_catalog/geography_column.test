@@ -1,0 +1,158 @@
+# name: test/sql/local/native_catalog/geography_column.test
+# description: A geography field only fails the statements that read or write it
+# group: [native_catalog]
+
+require-env CATALOG_TEST_CONFIG_SETUP mock
+
+include test/sql/init_requires
+
+require json
+
+# DuckDB can't create geography fields, so write the table with geometry and switch the field to geography
+# through REST. The data files then hold the WKB payload that a geography field stores.
+statement ok
+CREATE TABLE my_datalake.default.geography_table (
+	id BIGINT,
+	g GEOMETRY('OGC:CRS84'),
+	s STRUCT(a INTEGER, g GEOMETRY('OGC:CRS84'))
+) WITH ('format-version' = '3');
+
+statement ok
+INSERT INTO my_datalake.default.geography_table VALUES
+	(1, 'POINT (1 2)', {'a': 10, 'g': 'POINT (1 2)'}),
+	(2, 'POINT (3 4)', {'a': 20, 'g': 'POINT (3 4)'}),
+	(3, NULL, NULL);
+
+statement ok
+SET VARIABLE table_metadata = (
+	SELECT body FROM iceberg_test_catalog_request('GET', '/v1/namespaces/default/tables/geography_table', NULL)
+);
+
+query I
+SELECT status FROM iceberg_test_catalog_request('POST', '/v1/namespaces/default/tables/geography_table',
+	'{"requirements":[],"updates":[
+		{"action":"add-schema","schema":' ||
+			replace(replace(json_extract(getvariable('table_metadata'), '$.metadata.schemas[0]')::VARCHAR,
+				'"geometry(OGC:CRS84)"', '"geography(OGC:CRS84, spherical)"'),
+				'"schema-id":0', '"schema-id":1') || '},
+		{"action":"set-current-schema","schema-id":1}]}');
+----
+200
+
+query II
+SELECT column_name, column_type FROM (DESCRIBE my_datalake.default.geography_table);
+----
+id	BIGINT
+g	ICEBERG_GEOGRAPHY(OGC:CRS84, spherical)
+s	STRUCT(a INTEGER, g ICEBERG_GEOGRAPHY(OGC:CRS84, spherical))
+
+query I
+SELECT count(*) FROM my_datalake.default.geography_table;
+----
+3
+
+query II
+SELECT id, s.a FROM my_datalake.default.geography_table ORDER BY id;
+----
+1	10
+2	20
+3	NULL
+
+query I
+SELECT id FROM my_datalake.default.geography_table WHERE id > 1 ORDER BY id;
+----
+2
+3
+
+query I
+SELECT count(*) FROM iceberg_snapshots(my_datalake.default.geography_table);
+----
+1
+
+query I
+SELECT count(*) FROM iceberg_metadata(my_datalake.default.geography_table);
+----
+1
+
+query I
+SELECT count(*) > 0 FROM iceberg_column_stats(my_datalake.default.geography_table);
+----
+true
+
+query I
+SELECT count(*) FROM iceberg_files(my_datalake.default.geography_table);
+----
+1
+
+statement error
+SELECT g FROM my_datalake.default.geography_table;
+----
+Not implemented Error: Reading geography column "g" is not supported
+
+statement error
+SELECT * FROM my_datalake.default.geography_table;
+----
+Not implemented Error: Reading geography column "g" is not supported
+
+statement error
+SELECT id FROM my_datalake.default.geography_table WHERE g IS NULL;
+----
+Not implemented Error: Reading geography column "g" is not supported
+
+statement error
+SELECT s FROM my_datalake.default.geography_table;
+----
+Not implemented Error: Reading geography column "s" is not supported
+
+statement error
+SELECT s.g FROM my_datalake.default.geography_table;
+----
+Not implemented Error: Reading geography column "s.g" is not supported
+
+statement error
+INSERT INTO my_datalake.default.geography_table (id) VALUES (4);
+----
+Not implemented Error: Writing to Iceberg tables with geography columns is not supported
+
+statement error
+UPDATE my_datalake.default.geography_table SET id = 5 WHERE id = 1;
+----
+Not implemented Error: Writing to Iceberg tables with geography columns is not supported
+
+# DELETE writes only delete files
+statement ok
+DELETE FROM my_datalake.default.geography_table WHERE id = 3;
+
+query I
+SELECT id FROM my_datalake.default.geography_table ORDER BY id;
+----
+1
+2
+
+# Schema changes keep the geography type as the catalog sent it
+statement ok
+ALTER TABLE my_datalake.default.geography_table ADD COLUMN c INTEGER;
+
+query II
+SELECT
+	json_extract_string(body, '$.metadata.schemas[-1].fields[1].type'),
+	json_extract_string(body, '$.metadata.schemas[-1].fields[2].type.fields[1].type')
+FROM iceberg_test_catalog_request('GET', '/v1/namespaces/default/tables/geography_table', NULL);
+----
+geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)
+
+# DuckDB can't write geography values, so the type can't be declared
+statement error
+CREATE TABLE my_datalake.default.declared_geography (g ICEBERG_GEOGRAPHY);
+----
+Not implemented Error: Cannot declare "g": geography columns are not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ADD COLUMN g2 ICEBERG_GEOGRAPHY('OGC:CRS84');
+----
+Not implemented Error: Cannot declare "g2": geography columns are not supported
+
+statement error
+CREATE TABLE memory.main.declared_geography (g ICEBERG_GEOGRAPHY);
+----
+Not implemented Error: Cannot declare "g": geography columns are not supported
