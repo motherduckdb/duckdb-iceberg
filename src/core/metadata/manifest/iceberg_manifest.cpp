@@ -415,30 +415,24 @@ optional<sequence_number_t> IcebergManifestEntry::ExplicitFileSequenceNumber() c
 	return file_sequence_number;
 }
 
-sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifestFile &manifest_file) const {
+sequence_number_t IcebergManifestEntry::GetSequenceNumber(const IcebergManifest &manifest_file) const {
 	if (!sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
 			    "'manifest_entry.sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		if (!manifest_file.sequence_number) {
-			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
-		}
-		return *manifest_file.sequence_number;
+		return manifest_file.sequence_number;
 	}
 	return *sequence_number;
 }
 
-sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifestFile &manifest_file) const {
+sequence_number_t IcebergManifestEntry::GetFileSequenceNumber(const IcebergManifest &manifest_file) const {
 	if (!file_sequence_number) {
 		if (status != IcebergManifestEntryStatusType::ADDED) {
 			throw InvalidConfigurationException(
 			    "'manifest_entry.file_sequence_number' is only allowed to be NULL for ADDED entries");
 		}
-		if (!manifest_file.sequence_number) {
-			throw InvalidConfigurationException("'manifest_file.sequence_number' is not set");
-		}
-		return *manifest_file.sequence_number;
+		return manifest_file.sequence_number;
 	}
 	return *file_sequence_number;
 }
@@ -456,9 +450,9 @@ int64_t IcebergManifestEntry::GetSnapshotId() const {
 	return *snapshot_id;
 }
 
-optional<int64_t> IcebergManifestEntry::GetSnapshotId(const IcebergManifestFile &manifest_file) const {
+int64_t IcebergManifestEntry::GetSnapshotId(const IcebergManifestFile &manifest_file) const {
 	if (snapshot_id) {
-		return snapshot_id;
+		return *snapshot_id;
 	}
 	return manifest_file.added_snapshot_id;
 }
@@ -616,21 +610,28 @@ static Value FieldIdsForList(int32_t list_field_id, int32_t element_field_id) {
 	return Value::STRUCT(members);
 }
 
-idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestListEntry &manifest_entry,
-                  CopyFunction &copy, DatabaseInstance &db, ClientContext &context) {
-	auto &manifest_file = manifest_entry.file;
-	if (!manifest_entry.manifest_metadata) {
-		throw InternalException("Manifest entry for '%s' is missing typed manifest metadata",
-		                        manifest_file.manifest_path);
+static void WriteEntrySequenceNumber(VectorWriter<int64_t> &writer, optional<sequence_number_t> sequence_number,
+                                     IcebergManifestEntryStatusType status, const char *field) {
+	if (sequence_number) {
+		writer.WriteValue(*sequence_number);
+	} else if (status == IcebergManifestEntryStatusType::ADDED) {
+		writer.WriteNull();
+	} else {
+		throw InvalidConfigurationException("'manifest_entry.%s' is only allowed to be NULL for ADDED entries", field);
 	}
-	auto &manifest_entries = manifest_entry.GetManifestEntries();
-	auto &entry_metadata = *manifest_entry.manifest_metadata;
+}
+
+idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManifestMetadata &entry_metadata,
+                  const vector<IcebergManifestEntry> &manifest_entries, const string &path, CopyFunction &copy,
+                  DatabaseInstance &db, ClientContext &context) {
+	if (entry_metadata.format_version < 2) {
+		throw NotImplementedException("Writing Iceberg V%d manifests is not supported", entry_metadata.format_version);
+	}
 	auto &target_schema = table_metadata.GetSchemaFromId(entry_metadata.schema_id);
 	auto manifest_metadata = GetManifestMetadataMap(table_metadata, entry_metadata);
 	auto manifest_format_version = entry_metadata.format_version;
 	D_ASSERT(!manifest_entries.empty());
 	auto &allocator = db.GetBufferManager().GetBufferAllocator();
-	auto &path = manifest_file.manifest_path;
 
 	//! Create the types for the DataChunk
 
@@ -681,7 +682,10 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 	partition.emplace_back("__duckdb_field_id", Value::INTEGER(PARTITION));
 	partition.emplace_back("__duckdb_nullable", Value::BOOLEAN(false));
 	for (auto &entry : extended_partition_info) {
-		partition.emplace_back(entry.name, Value::INTEGER(static_cast<int32_t>(entry.field_id)));
+		//! SQLNULL is already Avro "null"; a nullable union would contain "null" twice.
+		auto partition_type = entry.transform.GetBoundsType(entry.source_type);
+		partition.emplace_back(entry.name, CreateFieldID(static_cast<int32_t>(entry.field_id),
+		                                                 partition_type.id() != LogicalTypeId::SQLNULL));
 	}
 	data_file_field_ids.emplace_back("partition", Value::STRUCT(partition));
 
@@ -843,25 +847,10 @@ idx_t WriteToFile(const IcebergTableMetadata &table_metadata, const IcebergManif
 			} else {
 				snapshot_id_writer.WriteNull();
 			}
-			// sequence_number: long
-			// file_sequence_number: long
-			if (manifest_entry.status == IcebergManifestEntryStatusType::ADDED) {
-				auto sequence_number = manifest_entry.ExplicitSequenceNumber();
-				if (sequence_number) {
-					sequence_number_writer.WriteValue(*sequence_number);
-				} else {
-					sequence_number_writer.WriteNull();
-				}
-				auto file_sequence_number = manifest_entry.ExplicitFileSequenceNumber();
-				if (file_sequence_number) {
-					file_sequence_number_writer.WriteValue(*file_sequence_number);
-				} else {
-					file_sequence_number_writer.WriteNull();
-				}
-			} else {
-				sequence_number_writer.WriteValue(manifest_entry.GetSequenceNumber(manifest_file));
-				file_sequence_number_writer.WriteValue(manifest_entry.GetFileSequenceNumber(manifest_file));
-			}
+			WriteEntrySequenceNumber(sequence_number_writer, manifest_entry.ExplicitSequenceNumber(),
+			                         manifest_entry.status, "sequence_number");
+			WriteEntrySequenceNumber(file_sequence_number_writer, manifest_entry.ExplicitFileSequenceNumber(),
+			                         manifest_entry.status, "file_sequence_number");
 
 			data_file_writers.WriteRow(i, manifest_entry.data_file, extended_partition_info);
 		}

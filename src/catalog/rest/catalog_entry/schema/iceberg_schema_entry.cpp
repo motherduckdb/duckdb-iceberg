@@ -533,12 +533,13 @@ static void UpdatePerColumnProperties(IcebergTable &updated_table, IcebergTransa
 
 template <typename T>
 IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<IcebergTableSchema> &new_schema) {
-	auto &column_name = alter_table_info.column_name;
+	auto &column_path = alter_table_info.column_path;
 
-	auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+	auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 	if (!column_p) {
 		throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
-		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(), column_name);
+		                      alter_table_info.GetAlterEntryData().GetQualifiedName().ToString(),
+		                      column_path.back().GetIdentifierName());
 	}
 	auto &column = *column_p;
 	return column;
@@ -738,7 +739,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto &column_path = cast.Child().Cast<ColumnRefExpression>().ColumnNames();
-		if (column_path[0] != change_type_info.column_name) {
+		if (column_path != change_type_info.column_path) {
 			throw NotImplementedException("ALTER TYPE with a USING expression is not supported for Iceberg tables");
 		}
 		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
@@ -901,15 +902,15 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::SET_DEFAULT: {
 		auto &set_default_info = alter_table_info.Cast<SetDefaultInfo>();
-		auto &column_name = set_default_info.column_name;
+		auto &column_path = set_default_info.column_path;
 		auto &expression = set_default_info.expression;
 
 		auto new_schema = current_schema.Copy();
 
-		auto column_p = new_schema->GetMutableFromPath({column_name}, nullptr);
+		auto column_p = new_schema->GetMutableFromPath(column_path, nullptr);
 		if (!column_p) {
 			throw BinderException("Binder Error: Table \"%s\" does not have a column with name \"%s\"",
-			                      table_entry.name.GetIdentifierName(), column_name.GetIdentifierName());
+			                      table_entry.name.GetIdentifierName(), column_path.back().GetIdentifierName());
 		}
 		auto &column = *column_p;
 

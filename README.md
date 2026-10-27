@@ -7,6 +7,20 @@ This repository contains DuckDB's Apache Iceberg extension. It adds support for 
 
 User-facing documentation is available on the [Iceberg extension page](https://duckdb.org/docs/extensions/iceberg).
 
+## Row lineage inside transactions
+
+For format version 3 tables, rows inserted within a transaction have NULL `_row_id`
+and `_last_updated_sequence_number` until commit. An UPDATE preserves an already
+assigned `_row_id`, including through repeated updates in the same transaction,
+but its new `_last_updated_sequence_number` remains NULL until commit. Rows from
+before a v2-to-v3 upgrade also retain NULL lineage until a v3 snapshot assigns it.
+
+Each data-changing statement publishes a snapshot at commit. A row inserted and
+then updated within one transaction can receive a different `_row_id` in each
+of those snapshots: the updates cannot preserve an ID that has not been assigned
+yet. After commit, further updates preserve its assigned ID. Use a business key
+to identify pending rows, rather than relying on their nullable lineage columns.
+
 ## Development setup
 
 Clone the repository with its DuckDB and extension tooling submodules:
@@ -112,6 +126,7 @@ The catalog targets start local services, generate compatible Iceberg test data,
 | Lakekeeper | `make lakekeeper` | `make lakekeeper-data` | Clones a pinned revision, applies the repository patch, and may add `seaweedfs` to `/etc/hosts` with `sudo` |
 | Nessie | `make nessie` | `make nessie-data` | Uses Nessie's `catalog-auth-s3` Compose setup |
 | Apache Polaris | `make polaris` | `make polaris-data` | Clones the `release/1.4.x` branch and uses its RustFS quickstart |
+| Test-only v2/v3 mock | `make mock` | Not required | Python standard library and local warehouse; [SQL testing and skip policy](scripts/mock_rest_catalog/README.md) |
 
 Starting a catalog stops the catalog currently named in `.catalogs/.active_catalog`. To stop one explicitly, use `make <catalog>-stop`. Catalog clones, runtime state, and generated data are kept in ignored directories.
 
@@ -147,7 +162,9 @@ To run one file:
   test/sql/local/catalog_test_config_setup/catalog_agnostic/create/test_create_table.test
 ```
 
-`scripts/catalog_test_config.sh` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, or `polaris`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
+`scripts/catalog_test_config.sh` accepts `fixture`, `fixture-latest`, `gravitino`, `lakekeeper`, `nessie`, `polaris`, or `mock`. It reports an error for a missing, empty, local-only, or unknown active-catalog marker.
+
+For the mock, run the catalog-agnostic SQL suite excluding `.test_slow`, with capability flags and skips controlled by `test/configs/mock.json`. You can pass that config directly after `make mock`; see the [mock catalog instructions](scripts/mock_rest_catalog/README.md). It has no Spark generator or Python integration profile. Stop it with `make mock-stop`.
 
 ### Catalog-backed Python tests
 
