@@ -117,31 +117,34 @@ TableFunction IcebergTableSchemaVersion::GetScanFunction(ClientContext &context,
 }
 
 virtual_column_map_t IcebergTableSchemaVersion::GetVirtualColumns() const {
-	return VirtualColumns();
+	return VirtualColumns(table_info.table_metadata.iceberg_version);
 }
 
-virtual_column_map_t IcebergTableSchemaVersion::VirtualColumns() {
+virtual_column_map_t IcebergTableSchemaVersion::VirtualColumns(int32_t iceberg_version) {
 	virtual_column_map_t result;
 	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILENAME, TableColumn("filename", LogicalType::VARCHAR));
-	result.emplace(COLUMN_IDENTIFIER_ROW_ID, TableColumn("_row_id", LogicalType::BIGINT));
 	result.emplace(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER,
 	               TableColumn("file_row_number", LogicalType::BIGINT));
-	result.emplace(IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER,
-	               TableColumn("_last_updated_sequence_number", LogicalType::BIGINT));
+	//! Row lineage columns only exist for format version >= 3
+	if (iceberg_version >= 3) {
+		result.emplace(COLUMN_IDENTIFIER_ROW_ID, TableColumn("_row_id", LogicalType::BIGINT));
+		result.emplace(IcebergMultiFileReader::COLUMN_IDENTIFIER_LAST_SEQUENCE_NUMBER,
+		               TableColumn("_last_updated_sequence_number", LogicalType::BIGINT));
+	}
 	return result;
 }
 
 //! NOTE: IcebergDelete::FindIcebergScan needs to change in tandem with this method
 vector<column_t> IcebergTableSchemaVersion::GetRowIdColumns() const {
 	vector<column_t> result;
-	auto &table_metadata = table_info.table_metadata;
-	if (table_metadata.iceberg_version >= 3) {
-		//! Project the _row_id column as part of the row-id-columns
-		result.push_back(COLUMN_IDENTIFIER_ROW_ID);
-	}
-
+	//! MERGE interprets a NULL first row-ID column as an absent target, so physical identity comes first.
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILENAME);
 	result.push_back(MultiFileReader::COLUMN_IDENTIFIER_FILE_ROW_NUMBER);
+	auto &table_metadata = table_info.table_metadata;
+	if (table_metadata.iceberg_version >= 3) {
+		//! Preserve assigned lineage on UPDATE; pending rows may have no assigned ID.
+		result.push_back(COLUMN_IDENTIFIER_ROW_ID);
+	}
 	return result;
 }
 

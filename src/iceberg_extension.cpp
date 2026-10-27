@@ -3,6 +3,7 @@
 #include "duckdb/main/secret/secret_manager.hpp"
 #include "duckdb/logging/log_manager.hpp"
 #include "duckdb/common/exception.hpp"
+#include "duckdb/common/error_data.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/function/scalar_function.hpp"
@@ -26,6 +27,7 @@
 #include "iceberg_attach.hpp"
 #include "iceberg_options.hpp"
 #include "common/iceberg_default.hpp"
+#include "common/iceberg_fixed_type.hpp"
 #include "function/copy/iceberg_copy_function.hpp"
 #include "duckdb/planner/planner_extension.hpp"
 #include "planning/iceberg_planner.hpp"
@@ -78,17 +80,25 @@ public:
 	}
 };
 
+static void LoadRequiredExtension(DatabaseInstance &instance, const string &extension_name) {
+	try {
+		ExtensionHelper::AutoLoadExtension(instance, extension_name);
+	} catch (std::exception &ex) {
+		ErrorData error(ex);
+		throw MissingExtensionException("The iceberg extension requires the %s extension, but it could not be "
+		                                "loaded. Try running \"INSTALL %s; LOAD %s;\" first.\nCause: %s",
+		                                extension_name, extension_name, extension_name, error.RawMessage());
+	}
+	if (!instance.ExtensionIsLoaded(extension_name)) {
+		throw MissingExtensionException("The iceberg extension requires the %s extension to be loaded!",
+		                                extension_name);
+	}
+}
+
 static void LoadInternal(ExtensionLoader &loader) {
 	auto &instance = loader.GetDatabaseInstance();
-	ExtensionHelper::AutoLoadExtension(instance, "parquet");
-	ExtensionHelper::AutoLoadExtension(instance, "avro");
-
-	if (!instance.ExtensionIsLoaded("parquet")) {
-		throw MissingExtensionException("The iceberg extension requires the parquet extension to be loaded!");
-	}
-	if (!instance.ExtensionIsLoaded("avro")) {
-		throw MissingExtensionException("The iceberg extension requires the avro extension to be loaded!");
-	}
+	LoadRequiredExtension(instance, "parquet");
+	LoadRequiredExtension(instance, "avro");
 
 	auto &config = DBConfig::GetConfig(instance);
 
@@ -124,6 +134,10 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                          "Whether or not to use server-side scanning planning (if available)",
 	                          LogicalType::BOOLEAN, Value::BOOLEAN(false), nullptr, SetScope::GLOBAL);
 	config.AddExtensionOption(
+	    ENABLE_MULTI_FILE_SCAN_TASKS_CONFIG_VARIABLE,
+	    "Execute eligible delete-free iceberg_scan_tasks descriptor lists through one Parquet multi-file scan.",
+	    LogicalType::BOOLEAN, Value::BOOLEAN(DEFAULT_ENABLE_MULTI_FILE_SCAN_TASKS), nullptr, SetScope::GLOBAL);
+	config.AddExtensionOption(
 	    "iceberg_logging_post_body_truncate_limit",
 	    "Maximum number of characters of a REST catalog POST body to include in Iceberg log messages. "
 	    "Bodies longer than this are truncated with a trailing '... (truncated)' marker. Set to 0 to omit the body.",
@@ -147,6 +161,9 @@ static void LoadInternal(ExtensionLoader &loader) {
 	    "equality-delete read path.",
 	    LogicalType::BOOLEAN, Value::BOOLEAN(false));
 #endif
+
+	// Iceberg Types
+	IcebergFixedType::Register(loader);
 
 	// Iceberg Table Functions
 	for (auto &fun : IcebergFunctions::GetTableFunctions(loader)) {

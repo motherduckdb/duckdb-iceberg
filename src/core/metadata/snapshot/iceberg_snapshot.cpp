@@ -38,10 +38,7 @@ static string OperationTypeToString(IcebergSnapshotOperationType type) {
 rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetadata &table_metadata) const {
 	rest_api_objects::Snapshot res;
 
-	if (!snapshot_id) {
-		throw InvalidConfigurationException("snapshot.snapshot_id is not set");
-	}
-	res.snapshot_id = *snapshot_id;
+	res.snapshot_id = snapshot_id;
 	res.timestamp_ms = timestamp_ms.value;
 	if (manifest_list.empty()) {
 		throw InvalidConfigurationException("Writing snapshots without a manifest list is not supported");
@@ -75,7 +72,7 @@ rest_api_objects::Snapshot IcebergSnapshot::ToRESTObject(const IcebergTableMetad
 IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot &snapshot,
                                                IcebergTableMetadata &metadata) {
 	//! The schema-id is optional, so it stays unset if the snapshot doesn't record it
-	IcebergSnapshot ret(snapshot.schema_id);
+	IcebergSnapshot ret(snapshot.schema_id, snapshot.snapshot_id);
 	if (metadata.iceberg_version == 1) {
 		//! SPEC: Snapshot field sequence-number must default to 0
 		ret.sequence_number = 0;
@@ -84,7 +81,6 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 		ret.sequence_number = *snapshot.sequence_number;
 	}
 
-	ret.snapshot_id = snapshot.snapshot_id;
 	ret.timestamp_ms = timestamp_ms_t(snapshot.timestamp_ms);
 	if (snapshot.manifest_list) {
 		ret.manifest_list = *snapshot.manifest_list;
@@ -94,6 +90,7 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 		throw InvalidConfigurationException("Snapshot must contain either 'manifest-list' or 'manifests'");
 	}
 	ret.metrics = IcebergSnapshotMetrics(snapshot.summary.additional_properties);
+	ret.summary = snapshot.summary.additional_properties;
 
 	if (snapshot.parent_snapshot_id) {
 		ret.parent_snapshot_id = *snapshot.parent_snapshot_id;
@@ -126,7 +123,7 @@ int32_t IcebergSnapshot::GetSchemaId() const {
 	if (!schema_id) {
 		throw NotImplementedException(
 		    "Snapshot %s doesn't record its 'schema-id', so the schema it was written with is unknown",
-		    snapshot_id ? std::to_string(*snapshot_id) : string("without a snapshot-id"));
+		    std::to_string(snapshot_id));
 	}
 	return *schema_id;
 }

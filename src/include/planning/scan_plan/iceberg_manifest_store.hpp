@@ -25,8 +25,8 @@ public:
 	void FinishScanTasks() DUCKDB_REQUIRES(lock);
 	const vector<IcebergManifestListEntry> &DataManifests() DUCKDB_REQUIRES(lock);
 	const vector<IcebergManifestListEntry> &DeleteManifests() DUCKDB_REQUIRES(lock);
-	const vector<reference<const IcebergManifestListEntry>> &TransactionDataManifests() const DUCKDB_REQUIRES(lock);
-	const vector<reference<const IcebergManifestListEntry>> &TransactionDeleteManifests() const DUCKDB_REQUIRES(lock);
+	vector<reference<const IcebergManifestListEntry>> TransactionDataManifests() const DUCKDB_REQUIRES(lock);
+	vector<reference<const IcebergManifestListEntry>> TransactionDeleteManifests() const DUCKDB_REQUIRES(lock);
 
 	// Shared with the planner so manifest publication and view binding use the same lock.
 	annotated_mutex &lock;
@@ -40,14 +40,15 @@ private:
 	bool data_manifest_scan_started DUCKDB_GUARDED_BY(lock) = false;
 
 	vector<IcebergManifestListEntry> committed_delete_manifests DUCKDB_GUARDED_BY(lock);
-	vector<reference<const IcebergManifestListEntry>> transaction_delete_manifests DUCKDB_GUARDED_BY(lock);
+	//! Owns the scan views of pending content; these never refer to Avro files.
+	vector<IcebergManifestListEntry> transaction_delete_manifests DUCKDB_GUARDED_BY(lock);
 	vector<shared_ptr<IcebergDeleteManifestLoadState>> delete_manifest_loads DUCKDB_GUARDED_BY(delete_manifest_lock);
 
 	vector<IcebergManifestListEntry> committed_data_manifests DUCKDB_GUARDED_BY(lock);
 	//! Keep track of which manifests we had to eagerly load, so we can emit batches for them once the data scan is
 	//! started
 	vector<bool> eagerly_loaded_data_manifests DUCKDB_GUARDED_BY(lock);
-	vector<reference<const IcebergManifestListEntry>> transaction_data_manifests DUCKDB_GUARDED_BY(lock);
+	vector<IcebergManifestListEntry> transaction_data_manifests DUCKDB_GUARDED_BY(lock);
 	unique_ptr<IcebergManifestScanningState> data_manifest_read_state DUCKDB_GUARDED_BY(lock);
 };
 

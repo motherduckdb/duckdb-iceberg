@@ -10,10 +10,11 @@ include test/sql/init_requires
 
 require json
 
+# Not a catalog table: the name is tried as a table location.
 statement error
 select * from iceberg_scan_plan('not_qualified');
 ----
-Expected fully qualified table name
+<REGEX>:.*(No such file|not found|Failed to read|Cannot open|does not exist).*
 
 statement ok
 create table scan_plan_local(i integer);

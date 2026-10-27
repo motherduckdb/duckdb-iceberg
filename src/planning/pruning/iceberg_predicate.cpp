@@ -1,5 +1,6 @@
 #include "planning/pruning/iceberg_predicate.hpp"
 
+#include "duckdb/common/types/variant_iterator.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -155,9 +156,52 @@ static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats) {
 	return stats.has_not_null == true;
 }
 
-bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
-                            const Expression &right, const IcebergPredicateStats &stats,
-                            const IcebergTransform &transform) {
+//! variant_comparator keys start with a byte that ranks the value's type (all numbers share one rank)
+static bool SameVariantTypeRank(const Value &key, const Value &other_key) {
+	if (key.type().id() != LogicalTypeId::BLOB || other_key.type().id() != LogicalTypeId::BLOB) {
+		return true;
+	}
+	auto &a = StringValue::Get(key);
+	auto &b = StringValue::Get(other_key);
+	return !a.empty() && !b.empty() && a[0] == b[0];
+}
+
+static bool TryEvaluateVariantScalarBound(ClientContext &context, const Expression &expr, Value &result) {
+	auto &comparator = expr.Cast<BoundFunctionExpression>();
+	D_ASSERT(comparator.Function().GetName() == "variant_comparator");
+	D_ASSERT(comparator.GetChildren().size() == 1);
+
+	Value bound;
+	if (!ExpressionExecutor::TryEvaluateScalar(context, *comparator.GetChildren()[0], bound) || bound.IsNull()) {
+		return false;
+	}
+	D_ASSERT(bound.type().id() == LogicalTypeId::VARIANT);
+	Vector bound_vector(bound, count_t(1));
+	VariantIterator iterator(bound_vector);
+	switch (iterator.Root(0).GetTypeId()) {
+	case VariantLogicalType::VARIANT_NULL:
+	case VariantLogicalType::OBJECT:
+	case VariantLogicalType::ARRAY:
+		// Missing fields and reconstructed containers are not scalar bounds.
+		return false;
+	default:
+		return ExpressionExecutor::TryEvaluateScalar(context, expr, result);
+	}
+}
+
+bool MatchVariantBounds(ClientContext &context, ExpressionType comparison_type, const Expression &left,
+                        const Expression &right, const IcebergPredicateStats &stats,
+                        const IcebergTransform &transform) {
+	if (comparison_type == ExpressionType::COMPARE_GREATERTHAN ||
+	    comparison_type == ExpressionType::COMPARE_GREATERTHANOREQUALTO) {
+		// Iceberg uses the same primitive bounds for a scalar and for the elements of an array.
+		// An ARRAY variant sorts after every primitive, so it may match even when its elements do not.
+		// Without the field's actual type, these bounds cannot rule out either comparison.
+		return true;
+	}
+	if (!stats.lower_bound || !stats.upper_bound) {
+		return true;
+	}
 	BoundExpressionReplacer lower_replacer(*stats.lower_bound);
 	BoundExpressionReplacer upper_replacer(*stats.upper_bound);
 	auto lower_copy = left.Copy();
@@ -172,10 +216,19 @@ bool MatchTransformedBounds(ClientContext &context, ExpressionType comparison_ty
 
 	Value transformed_lower_bound;
 	Value transformed_upper_bound;
-	if (!ExpressionExecutor::TryEvaluateScalar(context, *lower_copy, transformed_lower_bound)) {
+	if (!TryEvaluateVariantScalarBound(context, *lower_copy, transformed_lower_bound)) {
 		return true;
 	}
-	if (!ExpressionExecutor::TryEvaluateScalar(context, *upper_copy, transformed_upper_bound)) {
+	if (!TryEvaluateVariantScalarBound(context, *upper_copy, transformed_upper_bound)) {
+		return true;
+	}
+	if (transformed_lower_bound.IsNull() || transformed_upper_bound.IsNull()) {
+		//! The bounds have no entry for this path, so nothing is known about its values
+		return true;
+	}
+	if (!SameVariantTypeRank(transformed_lower_bound, right_constant) ||
+	    !SameVariantTypeRank(transformed_upper_bound, right_constant)) {
+		//! Bounds of another type say nothing about values of the filtered type
 		return true;
 	}
 	IcebergPredicateStats transformed_stats(stats);
@@ -253,14 +306,15 @@ static bool MatchBoundsExpression(ClientContext &context, const unique_ptr<Expre
 				return MatchBoundsConstant(right.Cast<BoundConstantExpression>().GetValue(), comparison_type, stats,
 				                           transform);
 			} else if (is_identity && IsVariantReference(left)) {
-				return MatchTransformedBounds(context, comparison_type, left, right, stats, transform);
+				return MatchVariantBounds(context, comparison_type, left, right, stats, transform);
 			}
 		} else if (left_is_const) {
 			if (right_is_ref) {
 				return MatchBoundsConstant(left.Cast<BoundConstantExpression>().GetValue(),
 				                           FlipComparisonExpression(comparison_type), stats, transform);
 			} else if (is_identity && IsVariantReference(right)) {
-				return MatchTransformedBounds(context, comparison_type, right, left, stats, transform);
+				return MatchVariantBounds(context, FlipComparisonExpression(comparison_type), right, left, stats,
+				                          transform);
 			}
 		}
 		return true;
