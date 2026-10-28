@@ -98,9 +98,9 @@ static optional<int32_t> TryParseSchemaIdFromSchemaJson(const string &schema_jso
 	                                : schema_id_val.GetUnsignedInteger());
 }
 
-//! Parses the 'partition-spec' key: the fields of the partition spec the manifest was written with
-static vector<rest_api_objects::PartitionField> ParseManifestPartitionFields(const string &spec_json,
-                                                                             const string &path) {
+//! Parses the 'partition-spec' key: the partition spec a v1 manifest was written with. Partition field ids are
+//! optional in v1, and IcebergPartitionSpec::ParseFromJson assigns 1000 + position when they're missing.
+static IcebergPartitionSpec ParseManifestPartitionSpec(const string &spec_json, const string &path) {
 	JSONParseError parse_error;
 	auto doc = JSONDocument::TryParse(spec_json.c_str(), spec_json.size(), parse_error);
 	if (!doc || !doc->GetRoot().IsArray()) {
@@ -108,7 +108,9 @@ static vector<rest_api_objects::PartitionField> ParseManifestPartitionFields(con
 		    "%s has Avro key-value metadata field 'partition-spec' that is not a JSON array of partition fields",
 		    ManifestMetadataErrorPrefix(path));
 	}
-	vector<rest_api_objects::PartitionField> fields;
+	rest_api_objects::PartitionSpec spec;
+	//! The key has no spec id; the parsed spec is only compared with the table's specs, never stored
+	spec.spec_id = 0;
 	string error;
 	doc->GetRoot().IterateArray([&](JSONValue field_val) {
 		if (!error.empty()) {
@@ -117,32 +119,24 @@ static vector<rest_api_objects::PartitionField> ParseManifestPartitionFields(con
 		rest_api_objects::PartitionField field;
 		error = field.TryFromJSON(field_val);
 		if (error.empty()) {
-			fields.push_back(std::move(field));
+			spec.fields.push_back(std::move(field));
 		}
 	});
 	if (!error.empty()) {
 		throw InvalidConfigurationException("%s has an invalid 'partition-spec' in its Avro key-value metadata: %s",
 		                                    ManifestMetadataErrorPrefix(path), error);
 	}
-	return fields;
+	return IcebergPartitionSpec::ParseFromJson(spec, 1);
 }
 
-//! Whether the fields from a manifest's 'partition-spec' are the fields of the given partition spec. A field-id is
-//! only compared when the manifest stores one.
-static bool PartitionSpecFieldsMatch(const vector<rest_api_objects::PartitionField> &manifest_fields,
-                                     const IcebergPartitionSpec &spec) {
-	if (manifest_fields.size() != spec.fields.size()) {
+//! Whether two partition specs have the same fields, including their partition field ids. Equals ignores the ids
+//! so ALTER can reuse a spec, but the manifest reader picks a data file's partition values by them.
+static bool SamePartitionSpecFields(const IcebergPartitionSpec &manifest_spec, const IcebergPartitionSpec &spec) {
+	if (!manifest_spec.Equals(spec)) {
 		return false;
 	}
-	for (idx_t i = 0; i < manifest_fields.size(); i++) {
-		auto &manifest_field = manifest_fields[i];
-		auto &spec_field = spec.fields[i];
-		if (static_cast<int64_t>(manifest_field.source_id) != static_cast<int64_t>(spec_field.source_id) ||
-		    manifest_field.transform.value != spec_field.transform.RawType()) {
-			return false;
-		}
-		if (manifest_field.field_id &&
-		    static_cast<int64_t>(*manifest_field.field_id) != static_cast<int64_t>(spec_field.partition_field_id)) {
+	for (idx_t i = 0; i < manifest_spec.fields.size(); i++) {
+		if (manifest_spec.fields[i].partition_field_id != spec.fields[i].partition_field_id) {
 			return false;
 		}
 	}
@@ -154,15 +148,14 @@ static bool PartitionSpecFieldsMatch(const vector<rest_api_objects::PartitionFie
 //! that list their manifests directly don't record one.
 static int32_t FindManifestPartitionSpecId(const InsertionOrderPreservingMap<Value> &metadata, const string &path,
                                            const IcebergTableMetadata &table_metadata, int32_t manifest_list_spec_id) {
-	auto manifest_fields =
-	    ParseManifestPartitionFields(GetRequiredMetadataString(metadata, "partition-spec", path), path);
+	auto manifest_spec = ParseManifestPartitionSpec(GetRequiredMetadataString(metadata, "partition-spec", path), path);
 	auto listed_spec = table_metadata.FindPartitionSpecById(manifest_list_spec_id);
-	if (listed_spec && PartitionSpecFieldsMatch(manifest_fields, *listed_spec)) {
+	if (listed_spec && SamePartitionSpecFields(manifest_spec, *listed_spec)) {
 		return manifest_list_spec_id;
 	}
 	optional<int32_t> matching_spec_id;
 	for (auto &entry : table_metadata.partition_specs) {
-		if (!PartitionSpecFieldsMatch(manifest_fields, entry.second)) {
+		if (!SamePartitionSpecFields(manifest_spec, entry.second)) {
 			continue;
 		}
 		if (matching_spec_id) {

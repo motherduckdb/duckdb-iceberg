@@ -121,7 +121,7 @@ IcebergSnapshot IcebergSnapshot::ParseSnapshot(const rest_api_objects::Snapshot 
 
 int32_t IcebergSnapshot::GetSchemaId() const {
 	if (!schema_id) {
-		throw NotImplementedException(
+		throw InvalidConfigurationException(
 		    "Snapshot %s doesn't record its 'schema-id', so the schema it was written with is unknown",
 		    std::to_string(snapshot_id));
 	}
