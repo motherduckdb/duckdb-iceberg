@@ -199,6 +199,30 @@
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_manifest_vector_writer_chunking.test_slow",
         "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/test_scan_many_files.test"
       ]
+    },
+    {
+      "reason": "Hundreds to thousands of statements in loops (2050 commits in test_many_table_properties, 1240 queries in test_nested_nan_null_filters); every statement is a slow S3 Tables round trip, so together these push the suite past the CI timeout. They exercise client-side stats/pruning logic covered by local catalogs",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/table_properties/test_many_table_properties.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_nested_nan_null_filters.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_nan_null_count_pruning.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_ordered_aggregate_state.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_struct_field_pruning.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/reads/filtering/test_filtering_spatial_intersects.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/partitions/test_partition_summary_missing_bounds.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/partitions/test_partition_summary_nan.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/partitions/test_partition_summary_uuid_extrema.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/partitions/test_partition_summary_time_metrics.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/transactions/test_multi_table_commit_integrity.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/insert/test_write_value_counts.test"
+      ]
+    },
+    {
+      "reason": "Uploads and scans large data volumes (TPC-H SF1, 100M-row CTAS); too slow against S3 Tables for the CI timeout (covered by local catalogs)",
+      "paths": [
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/test_tpch.test",
+        "test/sql/local/catalog_test_config_setup/catalog_agnostic/logging/test_logging_create_files.test"
+      ]
     }
   ]
 }
