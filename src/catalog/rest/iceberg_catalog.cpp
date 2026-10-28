@@ -527,11 +527,10 @@ void IcebergCatalog::VerifyMergeOnRead(const IcebergTableMetadata &metadata, con
 		return;
 	}
 	throw NotImplementedException(
-	    "DuckDB-Iceberg only supports merge-on-read for deletes, updates and merges. Table Property '%s' is set to "
-	    "'%s' for table %s. You can modify Iceberg table properties with the set_iceberg_table_properties() "
-	    "function, and remove them with the remove_iceberg_table_properties() function. You can view Iceberg table "
-	    "properties with the iceberg_table_properties() function",
-	    write_mode_property, metadata.GetTableProperty(write_mode_property), table_name);
+	    "Table property '%s' is set to '%s' for table %s, and only merge-on-read is supported for deletes, updates "
+	    "and merges. Set it with ALTER TABLE %s SET ('%s' = 'merge-on-read')",
+	    write_mode_property, metadata.GetTableProperty(write_mode_property), table_name, table_name,
+	    write_mode_property);
 }
 
 } // namespace duckdb
