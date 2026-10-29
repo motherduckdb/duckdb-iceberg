@@ -15,6 +15,7 @@
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 #include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 
+#include "common/iceberg_geography_type.hpp"
 #include "common/iceberg_utils.hpp"
 #include "iceberg_logging.hpp"
 #include "planning/iceberg_multi_file_list.hpp"
@@ -157,11 +158,44 @@ void IcebergMultiFileReader::BindOptions(MultiFileOptions &options, MultiFileLis
 	MultiFileReader::BindOptions(options, files, return_types, names, bind_data);
 }
 
+//! Whether the scan reads a geography field, which has no DuckDB type. Struct fields the scan doesn't select are
+//! skipped, so other fields of the same struct stay readable.
+static bool ReadsGeography(const MultiFileColumnDefinition &column, const ColumnIndex &index, string &path) {
+	if (!IcebergGeographyType::ContainsGeography(column.type)) {
+		return false;
+	}
+	path += path.empty() ? column.name.GetIdentifierName() : "." + column.name.GetIdentifierName();
+	if (!index.HasChildren() || column.type.id() != LogicalTypeId::STRUCT) {
+		return true;
+	}
+	for (auto &child_index : index.GetChildIndexes()) {
+		for (idx_t i = 0; i < column.children.size(); i++) {
+			auto &child = column.children[i];
+			const bool selected = child_index.HasPrimaryIndex()
+			                          ? child_index.GetPrimaryIndex() == i
+			                          : child.name.GetIdentifierName() == child_index.GetFieldName();
+			if (selected && ReadsGeography(child, child_index, path)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 unique_ptr<MultiFileReaderGlobalState>
 IcebergMultiFileReader::InitializeGlobalState(ClientContext &context, const MultiFileOptions &file_options,
                                               const MultiFileReaderBindData &bind_data, const MultiFileList &file_list,
                                               const vector<MultiFileColumnDefinition> &global_columns,
                                               const vector<ColumnIndex> &global_column_ids) {
+	for (auto &column_id : global_column_ids) {
+		if (column_id.IsVirtualColumn() || column_id.GetPrimaryIndex() >= global_columns.size()) {
+			continue;
+		}
+		string path;
+		if (ReadsGeography(global_columns[column_id.GetPrimaryIndex()], column_id, path)) {
+			throw NotImplementedException("Reading geography column \"%s\" is not supported", path);
+		}
+	}
 	return make_uniq<IcebergMultiFileReaderGlobalState>(file_list);
 }
 
