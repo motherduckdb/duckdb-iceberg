@@ -4,6 +4,7 @@
 #include "duckdb/common/type_visitor.hpp"
 #include "duckdb/parser/constraints/list.hpp"
 #include "duckdb/parser/expression/cast_expression.hpp"
+#include "duckdb/parser/expression/columnref_expression.hpp"
 #include "duckdb/parser/parsed_data/alter_info.hpp"
 #include "duckdb/parser/parsed_data/alter_table_info.hpp"
 #include "duckdb/parser/parsed_data/comment_on_column_info.hpp"
@@ -26,6 +27,7 @@
 #include "catalog/rest/api/iceberg_type.hpp"
 #include "catalog/rest/transaction/iceberg_transaction_update.hpp"
 #include "common/iceberg_default.hpp"
+#include "common/iceberg_geography_type.hpp"
 #include "iceberg_options.hpp"
 #include "duckdb/common/exception/http_exception.hpp"
 
@@ -530,6 +532,20 @@ static void UpdatePerColumnProperties(IcebergTable &updated_table, IcebergTransa
 		}
 	}
 }
+//! DuckDB can't read or write geography values, so a change to a geography field, or to a column that holds one, is
+//! refused
+static void ThrowIfGeography(const IcebergTableSchema &schema, const vector<Identifier> &column_path) {
+	auto column = schema.GetFromPath(column_path, nullptr);
+	if (column && IcebergGeographyType::ContainsGeography(column->type)) {
+		throw NotImplementedException("Altering geography column \"%s\" is not supported",
+		                              StringUtil::Join(IdentifiersToStrings(column_path), "."));
+	}
+}
+
+static void ThrowIfGeography(const IcebergTableSchema &schema, const ParsedExpression &expression) {
+	ParsedExpressionIterator::VisitExpression<ColumnRefExpression>(
+	    expression, [&](const ColumnRefExpression &colref) { ThrowIfGeography(schema, colref.ColumnNames()); });
+}
 
 template <typename T>
 IcebergColumnDefinition &ResolveColumn(T &alter_table_info, const shared_ptr<IcebergTableSchema> &new_schema) {
@@ -594,6 +610,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 
 	if (info.type == AlterType::SET_COLUMN_COMMENT) {
 		auto &comment_info = info.Cast<SetColumnCommentInfo>();
+		ThrowIfGeography(current_schema, {comment_info.column_name});
 
 		auto new_schema = current_schema.Copy();
 
@@ -621,6 +638,9 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	switch (alter_table_info.alter_table_type) {
 	case AlterTableType::SET_PARTITIONED_BY: {
 		auto &partition_info = alter_table_info.Cast<SetPartitionedByInfo>();
+		for (auto &partition_key : partition_info.partition_keys) {
+			ThrowIfGeography(current_schema, *partition_key);
+		}
 		if (updated_table.table_metadata.iceberg_version < 2) {
 			throw NotImplementedException("Partition evolution on Iceberg V%d tables",
 			                              updated_table.table_metadata.iceberg_version);
@@ -636,6 +656,9 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::SET_SORTED_BY: {
 		auto &sort_info = alter_table_info.Cast<SetSortedByInfo>();
+		for (auto &order : sort_info.orders) {
+			ThrowIfGeography(current_schema, *order.expression);
+		}
 
 		// Ensure schema is the same as current
 		transaction_data.TableAddAssertCurrentSchemaId();
@@ -685,6 +708,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	case AlterTableType::REMOVE_COLUMN: {
 		auto &remove_column_info = alter_table_info.Cast<RemoveColumnInfo>();
 		auto &to_remove_column = remove_column_info.removed_column;
+		ThrowIfGeography(current_schema, {to_remove_column});
 
 		if (remove_column_info.cascade) {
 			throw NotImplementedException("CASCADE is not implemented for Iceberg table DROP COLUMN");
@@ -728,6 +752,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::ALTER_COLUMN_TYPE: {
 		auto &change_type_info = alter_table_info.Cast<ChangeColumnTypeInfo>();
+		ThrowIfGeography(current_schema, change_type_info.column_path);
 
 		auto new_schema = current_schema.Copy();
 
@@ -788,11 +813,13 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 		return;
 	}
 	case AlterTableType::SET_NOT_NULL: {
+		ThrowIfGeography(current_schema, alter_table_info.Cast<SetNotNullInfo>().column_path);
 		// Column integrity is not transactionally guaranteed by Iceberg catalogs during SET NOT NULL
 		throw InvalidInputException("Cannot change nullable column to non-nullable");
 	}
 	case AlterTableType::DROP_NOT_NULL: {
 		auto &drop_not_null_info = alter_table_info.Cast<DropNotNullInfo>();
+		ThrowIfGeography(current_schema, drop_not_null_info.column_path);
 
 		auto new_schema = current_schema.Copy();
 
@@ -805,6 +832,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::RENAME_COLUMN: {
 		auto &rename_info = alter_table_info.Cast<RenameColumnInfo>();
+		ThrowIfGeography(current_schema, {rename_info.old_name});
 		auto &column_name = rename_info.old_name;
 		auto &new_name = rename_info.new_name;
 
@@ -902,6 +930,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::SET_DEFAULT: {
 		auto &set_default_info = alter_table_info.Cast<SetDefaultInfo>();
+		ThrowIfGeography(current_schema, set_default_info.column_path);
 		auto &column_path = set_default_info.column_path;
 		auto &expression = set_default_info.expression;
 
@@ -923,6 +952,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::ADD_FIELD: {
 		auto &add_field_info = alter_table_info.Cast<AddFieldInfo>();
+		ThrowIfGeography(current_schema, add_field_info.column_path);
 		auto &column_path = add_field_info.column_path;
 		auto &new_field = add_field_info.new_field;
 		auto &if_field_not_exists = add_field_info.if_field_not_exists;
@@ -977,6 +1007,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::RENAME_FIELD: {
 		auto &rename_field_info = alter_table_info.Cast<RenameFieldInfo>();
+		ThrowIfGeography(current_schema, rename_field_info.column_path);
 		auto &column_path = rename_field_info.column_path;
 		auto &new_name = rename_field_info.new_name;
 
@@ -1015,6 +1046,7 @@ void IcebergSchemaEntry::Alter(CatalogTransaction transaction, AlterInfo &info) 
 	}
 	case AlterTableType::REMOVE_FIELD: {
 		auto &remove_field_info = alter_table_info.Cast<RemoveFieldInfo>();
+		ThrowIfGeography(current_schema, remove_field_info.column_path);
 		auto &column_path = remove_field_info.column_path;
 		auto &cascade = remove_field_info.cascade;
 		auto &if_column_exists = remove_field_info.if_column_exists;
