@@ -169,6 +169,99 @@ FROM iceberg_test_catalog_request('GET', '/v1/namespaces/default/tables/geograph
 ----
 geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)
 
+# Changes to a geography field, or to a column that holds one, are refused
+statement error
+ALTER TABLE my_datalake.default.geography_table RENAME COLUMN g TO g2;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table DROP COLUMN g;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ALTER COLUMN g TYPE BLOB;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ALTER COLUMN g SET DEFAULT NULL;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ALTER COLUMN g DROP DEFAULT;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ALTER COLUMN g SET NOT NULL;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ALTER COLUMN g DROP NOT NULL;
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+COMMENT ON COLUMN my_datalake.default.geography_table.g IS 'location';
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table SET PARTITIONED BY (g);
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table SET PARTITIONED BY (bucket(4, g));
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table SET SORTED BY (id, g);
+----
+Not implemented Error: Altering geography column "g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table RENAME COLUMN s.g TO g2;
+----
+Not implemented Error: Altering geography column "s.g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table DROP COLUMN s.g;
+----
+Not implemented Error: Altering geography column "s.g" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table ADD COLUMN s.b INTEGER;
+----
+Not implemented Error: Altering geography column "s" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table DROP COLUMN s;
+----
+Not implemented Error: Altering geography column "s" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table DROP COLUMN l;
+----
+Not implemented Error: Altering geography column "l" is not supported
+
+statement error
+ALTER TABLE my_datalake.default.geography_table RENAME COLUMN m TO m2;
+----
+Not implemented Error: Altering geography column "m" is not supported
+
+# Changes to other columns still work
+statement ok
+ALTER TABLE my_datalake.default.geography_table RENAME COLUMN c TO c2;
+
+statement ok
+ALTER TABLE my_datalake.default.geography_table SET PARTITIONED BY (id);
+
 # Geography isn't a DuckDB type, so it can't be declared
 statement error
 CREATE TABLE my_datalake.default.declared_geography (g GEOGRAPHY);
