@@ -368,7 +368,10 @@ ColumnDefinition IcebergColumnDefinition::GetColumnDefinition() const {
 	auto res = ColumnDefinition(Identifier(name), type);
 
 	auto write_default = GetWriteDefault();
-	if (type.id() == LogicalTypeId::STRUCT) {
+	if (IcebergGeographyType::ContainsGeography(type)) {
+		// Geography fields can't be written, and a default expression would name the geography type, which isn't a
+		// registered DuckDB type, so binding any INSERT or UPDATE would fail before the write is refused
+	} else if (type.id() == LogicalTypeId::STRUCT) {
 		// DuckDB's default projection hook receives the bound default expression, but not the Iceberg column
 		// metadata from which it originated. Carry the recursive field defaults through that existing interface in
 		// a real `constant_or_null` expression:

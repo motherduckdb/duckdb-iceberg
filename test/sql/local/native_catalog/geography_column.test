@@ -45,10 +45,10 @@ query II
 SELECT column_name, column_type FROM (DESCRIBE my_datalake.default.geography_table);
 ----
 id	BIGINT
-g	ICEBERG_GEOGRAPHY(OGC:CRS84, spherical)
-s	STRUCT(a INTEGER, g ICEBERG_GEOGRAPHY(OGC:CRS84, spherical))
-l	ICEBERG_GEOGRAPHY(OGC:CRS84, spherical)[]
-m	MAP(VARCHAR, ICEBERG_GEOGRAPHY(OGC:CRS84, spherical))
+g	geography(OGC:CRS84, spherical)
+s	STRUCT(a INTEGER, g geography(OGC:CRS84, spherical))
+l	geography(OGC:CRS84, spherical)[]
+m	MAP(VARCHAR, geography(OGC:CRS84, spherical))
 
 query I
 SELECT count(*) FROM my_datalake.default.geography_table;
@@ -169,18 +169,13 @@ FROM iceberg_test_catalog_request('GET', '/v1/namespaces/default/tables/geograph
 ----
 geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)	geography(OGC:CRS84, spherical)
 
-# DuckDB can't write geography values, so the type can't be declared
+# Geography isn't a DuckDB type, so it can't be declared
 statement error
-CREATE TABLE my_datalake.default.declared_geography (g ICEBERG_GEOGRAPHY);
+CREATE TABLE my_datalake.default.declared_geography (g GEOGRAPHY);
 ----
-Not implemented Error: Cannot declare "g": geography columns are not supported
+Catalog Error: Type with name GEOGRAPHY does not exist!
 
 statement error
-ALTER TABLE my_datalake.default.geography_table ADD COLUMN g2 ICEBERG_GEOGRAPHY('OGC:CRS84');
+ALTER TABLE my_datalake.default.geography_table ADD COLUMN g2 GEOGRAPHY('OGC:CRS84');
 ----
-Not implemented Error: Cannot declare "g2": geography columns are not supported
-
-statement error
-CREATE TABLE memory.main.declared_geography (g ICEBERG_GEOGRAPHY);
-----
-Not implemented Error: Cannot declare "g": geography columns are not supported
+Catalog Error: Type with name GEOGRAPHY does not exist!
