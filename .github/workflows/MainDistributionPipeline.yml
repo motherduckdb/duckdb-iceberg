@@ -15,10 +15,10 @@ jobs:
   duckdb-stable-build:
     name: Build extension binaries
     # Keep the shared workflows and their checkouts aligned with the CI-tools submodule.
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@969bc76276acec1c0a3922ff500d2ec3a1a3b037 # v2.0-cyanoptera 2026-10-01 pin
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@5a015b297d67d68952df00457dd4c37c0fc80ba3
     with:
       extension_name: iceberg
-      ci_tools_version: 969bc76276acec1c0a3922ff500d2ec3a1a3b037 # v2.0-cyanoptera 2026-10-01 pin
+      ci_tools_version: 5a015b297d67d68952df00457dd4c37c0fc80ba3
       vcpkg_commit: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
       exclude_archs: 'windows_amd64_mingw'
       extra_toolchains: 'python3'
@@ -30,11 +30,11 @@ jobs:
   duckdb-stable-deploy:
     name: Deploy extension binaries
     needs: duckdb-stable-build
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@969bc76276acec1c0a3922ff500d2ec3a1a3b037 # v2.0-cyanoptera 2026-10-01 pin
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_deploy.yml@5a015b297d67d68952df00457dd4c37c0fc80ba3
     secrets: inherit
     with:
       extension_name: iceberg
-      ci_tools_version: 969bc76276acec1c0a3922ff500d2ec3a1a3b037 # v2.0-cyanoptera 2026-10-01 pin
+      ci_tools_version: 5a015b297d67d68952df00457dd4c37c0fc80ba3
       exclude_archs: 'windows_amd64_mingw'
       deploy_latest: ${{ startsWith(github.ref, 'refs/heads/v') || github.ref == 'refs/heads/main' }}
       deploy_versioned: ${{ startsWith(github.ref, 'refs/heads/v') || github.ref == 'refs/heads/main' }}
@@ -44,5 +44,5 @@ jobs:
     uses: duckdb/extension-ci-tools/.github/workflows/_extension_code_quality.yml@969bc76276acec1c0a3922ff500d2ec3a1a3b037 # v2.0-cyanoptera 2026-10-01 pin
     with:
       extension_name: iceberg
-      ci_tools_version: 969bc76276acec1c0a3922ff500d2ec3a1a3b037 # v2.0-cyanoptera 2026-10-01 pin
+      ci_tools_version: 5a015b297d67d68952df00457dd4c37c0fc80ba3
       format_checks: 'format'
