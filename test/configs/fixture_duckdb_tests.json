@@ -175,6 +175,7 @@
         "test/sql/types/nested/map/test_map_nested_keys.test",
         "test/sql/types/struct/nested_structs.test",
         "test/sql/types/struct/struct_updates.test",
+        "test/sql/insert/test_insert_ignored_syntax.test",
         "test/sql/function/list/aggregates/any_value.test",
         "test/sql/function/list/aggregates/entropy.test",
         "test/sql/function/list/aggregates/first.test",
@@ -576,6 +577,12 @@
       ]
     },
     {
+      "reason": "Tests DuckDB undo-buffer and index cleanup with fixed memory limits; Iceberg has different commit semantics and S3 metadata writes exceed the setup memory budget",
+      "paths": [
+        "test/sql/transactions/test_commit_cleanup_oom_index_retry.test"
+      ]
+    },
+    {
       "reason": "Stats / memory_usage / transitive filter output reflects iceberg storage",
       "paths": [
         "test/sql/delete/in_memory_bulk_delete.test_slow",
@@ -686,8 +693,9 @@
       ]
     },
     {
-      "reason": "Upstream UTF8 tests assume insertion order without ORDER BY; Iceberg returns the rows in a different order",
+      "reason": "Upstream tests assume insertion order without ORDER BY; Iceberg returns the rows in a different order",
       "paths": [
+        "test/sql/insert/test_insert_ignored_syntax.test",
         "test/sql/function/string/test_contains_utf8.test",
         "test/sql/function/string/test_instr_utf8.test",
         "test/sql/function/string/test_starts_with_function_utf8.test"
@@ -852,6 +860,12 @@
       "paths": [
         "test/sql/storage/encryption/temp_files/encrypted_tpch_join.test_slow",
         "test/sql/storage/external_file_cache/external_file_cache_parquet_tpch.test_slow"
+      ]
+    },
+    {
+      "reason": "Flaky native spill-accounting assertion: parallel CTAS can leave freed interior block slots in temp files; file sizes include those slots while duckdb_memory reports only live spilled bytes",
+      "paths": [
+        "test/sql/storage/encryption/temp_files/encrypted_temp_file_size_accounting.test"
       ]
     },
     {

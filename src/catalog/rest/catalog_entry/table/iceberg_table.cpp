@@ -42,6 +42,51 @@ const string &IcebergTable::BaseFilePath() const {
 	return table_metadata.location;
 }
 
+void IcebergTable::VerifyReadEncryptionSupported() const {
+	for (auto &sse_type : GetS3EncryptionTypes()) {
+		if (StringUtil::CIEquals(sse_type, "custom")) {
+			throw NotImplementedException("Cannot read Iceberg table '%s': the catalog requests S3 server-side "
+			                              "encryption with 's3.sse.type'='%s'",
+			                              name, sse_type);
+		}
+	}
+}
+
+void IcebergTable::VerifyWriteEncryptionSupported() const {
+	for (auto &sse_type : GetS3EncryptionTypes()) {
+		if (!StringUtil::CIEquals(sse_type, "none")) {
+			throw NotImplementedException("Cannot write to Iceberg table '%s': the catalog requests S3 server-side "
+			                              "encryption with 's3.sse.type'='%s'",
+			                              name, sse_type);
+		}
+	}
+}
+
+vector<string> IcebergTable::GetS3EncryptionTypes() const {
+	vector<string> sse_types;
+	if (DetectStorageType(table_metadata.GetLocation()) != "s3") {
+		return sse_types;
+	}
+	// table config overrides the catalog config, and each storage credential overrides both.
+	static const string SSE_TYPE = "s3.sse.type";
+	auto it = config.find(SSE_TYPE);
+	if (it != config.end()) {
+		sse_types.push_back(it->second);
+	} else {
+		auto catalog_it = catalog.catalog_properties.find(SSE_TYPE);
+		if (catalog_it != catalog.catalog_properties.end()) {
+			sse_types.push_back(catalog_it->second);
+		}
+	}
+	for (auto &credential : storage_credentials) {
+		auto credential_it = credential.config.find(SSE_TYPE);
+		if (credential_it != credential.config.end()) {
+			sse_types.push_back(credential_it->second);
+		}
+	}
+	return sse_types;
+}
+
 static void ParseGCSConfigOptions(const case_insensitive_map_t<string> &config,
                                   case_insensitive_map_t<Value> &options) {
 	// Parse GCS-specific configuration.
@@ -159,7 +204,7 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 			                            it->second);
 		}
 
-		options["use_ssl"] = Value(!path_style);
+		// path-style access only changes where the bucket name goes in the URL; the endpoint's scheme decides ssl.
 		if (path_style) {
 			options["url_style"] = "path";
 		}
@@ -172,6 +217,8 @@ static void ParseConfigOptions(const case_insensitive_map_t<string> &config, cas
 	auto endpoint = endpoint_it->second.ToString();
 	if (StringUtil::StartsWith(endpoint, "http://")) {
 		endpoint = endpoint.substr(7, string::npos);
+		// an endpoint with http:// doesn't use ssl.
+		options["use_ssl"] = Value(false);
 	}
 	if (StringUtil::StartsWith(endpoint, "https://")) {
 		endpoint = endpoint.substr(8, string::npos);
@@ -615,6 +662,7 @@ static void AddHTTPSecretsToOptions(SecretEntry &http_secret_entry, case_insensi
 }
 
 void IcebergTable::LoadCredentials(ClientContext &context) const {
+	VerifyReadEncryptionSupported();
 	if (catalog.attach_options.access_mode != IRCAccessDelegationMode::VENDED_CREDENTIALS) {
 		// assume secret already exists
 		return;
