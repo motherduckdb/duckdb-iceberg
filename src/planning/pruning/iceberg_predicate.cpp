@@ -69,9 +69,29 @@ static bool NaNMayMatch(const Value &constant, ExpressionType comparison_type, c
 	}
 }
 
+static bool MatchBoundsIsNullFilter(const IcebergPredicateStats &stats) {
+	return stats.has_null == true;
+}
+
+static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats) {
+	return stats.has_not_null == true;
+}
+
 template <class TRANSFORM>
 static bool MatchBoundsConstantTemplated(const Value &constant, ExpressionType comparison_type,
                                          const IcebergPredicateStats &stats, const IcebergTransform &transform) {
+	if (constant.IsNull()) {
+		//! Older clients push 'col IS [NOT] DISTINCT FROM NULL' without rewriting it to 'col IS [NOT] NULL'
+		switch (comparison_type) {
+		case ExpressionType::COMPARE_DISTINCT_FROM:
+			return MatchBoundsIsNotNullFilter(stats);
+		case ExpressionType::COMPARE_NOT_DISTINCT_FROM:
+			return MatchBoundsIsNullFilter(stats);
+		default:
+			//! Any other comparison with NULL is never true
+			return false;
+		}
+	}
 	auto constant_value = TRANSFORM::ApplyTransform(constant, transform);
 	if (constant_value.IsNull()) {
 		//! Comparison with NULL is never true here
@@ -146,14 +166,6 @@ static bool MatchBoundsConstant(const Value &constant, ExpressionType comparison
 	default:
 		throw InvalidConfigurationException("Transform '%s' not implemented", transform.RawType());
 	}
-}
-
-static bool MatchBoundsIsNullFilter(const IcebergPredicateStats &stats) {
-	return stats.has_null == true;
-}
-
-static bool MatchBoundsIsNotNullFilter(const IcebergPredicateStats &stats) {
-	return stats.has_not_null == true;
 }
 
 //! variant_comparator keys start with a byte that ranks the value's type (all numbers share one rank)
