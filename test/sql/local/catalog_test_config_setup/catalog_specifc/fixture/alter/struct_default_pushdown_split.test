@@ -55,3 +55,6 @@ SELECT payload.extra.w FROM my_datalake.default.sdp_unpartitioned_only;
 
 statement ok
 DROP TABLE my_datalake.default.sdp_unpartitioned_only;
+
+statement ok
+RESET __iceberg_unsafe_struct_null_default_interp;
