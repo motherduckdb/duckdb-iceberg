@@ -72,3 +72,6 @@ true
 
 statement ok
 DROP TABLE my_datalake.default.struct_default_mixed_specs;
+
+statement ok
+RESET __iceberg_unsafe_struct_null_default_interp;
