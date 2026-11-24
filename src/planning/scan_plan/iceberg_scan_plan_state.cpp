@@ -16,6 +16,12 @@ const IcebergScanConfiguration &IcebergScanPlanState::Configuration() const {
 }
 
 void IcebergScanPlanState::RequireConfigurable() const {
+	if (configuration_frozen || scan_identity_frozen) {
+		throw InternalException("Cannot change Iceberg scan configuration after planning or view creation has started");
+	}
+}
+
+void IcebergScanPlanState::RequirePlanningConfigurable() const {
 	if (configuration_frozen) {
 		throw InternalException("Cannot change Iceberg scan configuration after planning or view creation has started");
 	}
@@ -37,19 +43,24 @@ void IcebergScanPlanState::SetTable(IcebergTableSchemaVersion &table) {
 }
 
 void IcebergScanPlanState::DisableServerSidePlanning() {
-	RequireConfigurable();
+	RequirePlanningConfigurable();
 	configuration.server_side_planning_enabled = false;
 }
 
 void IcebergScanPlanState::RequireRowIds() {
-	RequireConfigurable();
+	RequirePlanningConfigurable();
 	configuration.row_ids_required = true;
 }
 
-void IcebergScanPlanState::FreezeConfiguration() {
+void IcebergScanPlanState::FreezeScanIdentity() {
 	if (!configuration.scan_info) {
 		throw InternalException("Cannot start Iceberg scan planning without scan metadata");
 	}
+	scan_identity_frozen = true;
+}
+
+void IcebergScanPlanState::FreezeConfiguration() {
+	FreezeScanIdentity();
 	configuration_frozen = true;
 }
 
@@ -68,25 +79,41 @@ IcebergScanPlanProvider &IcebergScanPlanState::GetScanPlanProvider(const Iceberg
                                                                    const IcebergScanOrder &scan_order) {
 	if (!scan_plan_provider) {
 		FreezeConfiguration();
-		auto &scan_info = *configuration.scan_info;
-		IcebergScanPlanContext plan_context {context,
-		                                     fs,
-		                                     configuration.path,
-		                                     configuration.options,
-		                                     scan_info.snapshot_info,
-		                                     scan_info.metadata,
-		                                     scan_info.schema,
-		                                     scan_info.transaction_data.get(),
-		                                     scan_info.file_secret};
-		scan_plan_provider =
-		    IcebergScanPlanProvider::Create(*this, std::move(plan_context), configuration.table, filters, scan_order,
-		                                    configuration.server_side_planning_enabled);
+		scan_plan_provider = IcebergScanPlanProvider::Create(*this, CreatePlanContext(), configuration.table, filters,
+		                                                     scan_order, configuration.server_side_planning_enabled);
 	}
 	return *scan_plan_provider;
 }
 
+bool IcebergScanPlanState::HasScanPlanProvider() const {
+	return scan_plan_provider != nullptr;
+}
+
+bool IcebergScanPlanState::MayPlanServerSide() const {
+	auto &scan_info = *configuration.scan_info;
+	return IcebergScanPlanProvider::MayPlanServerSide(context, scan_info.snapshot_info, configuration.table,
+	                                                  scan_info.transaction_data != nullptr,
+	                                                  configuration.server_side_planning_enabled);
+}
+
+IcebergScanPlanContext IcebergScanPlanState::CreatePlanContext() const {
+	if (!configuration.scan_info) {
+		throw InternalException("Cannot start Iceberg scan planning without scan metadata");
+	}
+	auto &scan_info = *configuration.scan_info;
+	return IcebergScanPlanContext {context,
+	                               fs,
+	                               configuration.path,
+	                               configuration.options,
+	                               scan_info.snapshot_info,
+	                               scan_info.metadata,
+	                               scan_info.schema,
+	                               scan_info.transaction_data.get(),
+	                               scan_info.file_secret};
+}
+
 IcebergManifestStore &IcebergScanPlanState::GetManifestStore(IcebergScanPlanContext context) {
-	FreezeConfiguration();
+	FreezeScanIdentity();
 	if (!manifest_store) {
 		manifest_store = make_uniq<IcebergManifestStore>(lock, std::move(context));
 	}

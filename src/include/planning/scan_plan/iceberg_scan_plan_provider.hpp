@@ -23,6 +23,10 @@ public:
 	Create(IcebergScanPlanState &shared_state, IcebergScanPlanContext context,
 	       optional_ptr<IcebergTableSchemaVersion> table_entry, const IcebergTableFilters &table_filters,
 	       const IcebergScanOrder &scan_order, bool server_side_planning_enabled);
+	//! Whether Create may ask the catalog to plan the scan. Disabling server-side planning only ever turns this off.
+	static bool MayPlanServerSide(ClientContext &context, const IcebergSnapshotScanInfo &snapshot,
+	                              optional_ptr<IcebergTableSchemaVersion> table_entry, bool has_transaction_data,
+	                              bool server_side_planning_enabled);
 
 	virtual void LoadManifestList() = 0;
 	virtual void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) = 0;

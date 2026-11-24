@@ -73,6 +73,10 @@ private:
 	bool HasInvalidatedFiles() const;
 
 	void InitializeView(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
+	//! Collects the provider's manifests and whether they may match the filters; returns whether a delete manifest may
+	bool CollectManifests(IcebergScanPlanProvider &provider, vector<BoundIcebergManifestListEntry> &data,
+	                      vector<bool> &data_matches, vector<BoundIcebergManifestListEntry> &deletes,
+	                      vector<bool> &delete_matches) const DUCKDB_REQUIRES(shared_state->lock);
 	void EnsureScanOrderApplied(annotated_lock_guard<annotated_mutex> &guard) const DUCKDB_REQUIRES(shared_state->lock);
 	optional_ptr<const BoundIcebergManifestEntry> GetDataFile(idx_t file_id,
 	                                                          annotated_lock_guard<annotated_mutex> &guard) const

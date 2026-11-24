@@ -51,6 +51,11 @@ public:
 	//! The first planning request selects the provider; subsequent filtered views reuse it.
 	IcebergScanPlanProvider &GetScanPlanProvider(const IcebergTableFilters &filters, const IcebergScanOrder &scan_order)
 	    DUCKDB_REQUIRES(lock);
+	bool HasScanPlanProvider() const DUCKDB_REQUIRES(lock);
+	//! Whether planning may ask the catalog to plan the scan
+	bool MayPlanServerSide() const DUCKDB_REQUIRES(lock);
+	IcebergScanPlanContext CreatePlanContext() const DUCKDB_REQUIRES(lock);
+	//! Fixes the scan identity, but not the requirements that decide how the scan is planned
 	IcebergManifestStore &GetManifestStore(IcebergScanPlanContext context) DUCKDB_REQUIRES(lock);
 
 	mutable annotated_mutex lock;
@@ -65,7 +70,11 @@ private:
 	mutex equality_bounds_lock;
 	unordered_map<idx_t, unordered_map<idx_t, unique_ptr<IcebergEqualityDeleteBounds>>> equality_delete_bounds;
 	void RequireConfigurable() const DUCKDB_REQUIRES(lock);
+	void RequirePlanningConfigurable() const DUCKDB_REQUIRES(lock);
+	void FreezeScanIdentity() DUCKDB_REQUIRES(lock);
 	bool configuration_frozen DUCKDB_GUARDED_BY(lock) = false;
+	//! Set once the manifest list may have been read: scan info, path, options and table can no longer change
+	bool scan_identity_frozen DUCKDB_GUARDED_BY(lock) = false;
 	unique_ptr<IcebergManifestStore> manifest_store DUCKDB_GUARDED_BY(lock);
 	//! Destroy the provider before the manifest store it may reference.
 	unique_ptr<IcebergScanPlanProvider> scan_plan_provider DUCKDB_GUARDED_BY(lock);

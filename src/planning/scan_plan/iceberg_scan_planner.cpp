@@ -146,39 +146,46 @@ static bool ManifestMayMatch(const IcebergFilePruner &pruner, const IcebergManif
 	return pruner.ManifestMatchesFilter(manifest);
 }
 
-void IcebergScanPlanner::InitializeView(annotated_lock_guard<annotated_mutex> &guard) const {
-	if (view_initialized) {
-		return;
-	}
-	GetScanPlanProvider().LoadManifestList();
+bool IcebergScanPlanner::CollectManifests(IcebergScanPlanProvider &provider,
+                                          vector<BoundIcebergManifestListEntry> &data, vector<bool> &data_matches,
+                                          vector<BoundIcebergManifestListEntry> &deletes,
+                                          vector<bool> &delete_matches) const {
+	provider.LoadManifestList();
 	IcebergFilePruner pruner(context, GetMetadata(), GetSchema(), table_filters);
-	auto &committed_data = GetScanPlanProvider().DataManifests();
-	for (auto &manifest : committed_data) {
-		data_manifests.emplace_back(data_manifests.size(), manifest);
-		data_manifest_matches.push_back(ManifestMayMatch(pruner, manifest));
+	for (auto &manifest : provider.DataManifests()) {
+		data.emplace_back(data.size(), manifest);
+		data_matches.push_back(ManifestMayMatch(pruner, manifest));
 	}
-	for (auto &manifest : GetScanPlanProvider().TransactionDataManifests()) {
+	for (auto &manifest : provider.TransactionDataManifests()) {
 		auto &metadata = manifest.get().manifest_metadata;
 		D_ASSERT(metadata);
 		auto lineage_mode =
 		    metadata->format_version >= 3 ? IcebergRowLineageMode::STORED_ONLY : IcebergRowLineageMode::NONE;
-		data_manifests.emplace_back(data_manifests.size(), manifest, lineage_mode);
-		data_manifest_matches.push_back(ManifestMayMatch(pruner, manifest.get()));
+		data.emplace_back(data.size(), manifest, lineage_mode);
+		data_matches.push_back(ManifestMayMatch(pruner, manifest.get()));
 	}
-	auto &committed_deletes = GetScanPlanProvider().DeleteManifests();
 	bool has_matching_deletes = false;
-	for (auto &manifest : committed_deletes) {
-		delete_manifests.emplace_back(delete_manifests.size(), manifest);
+	for (auto &manifest : provider.DeleteManifests()) {
+		deletes.emplace_back(deletes.size(), manifest);
 		auto matches = ManifestMayMatch(pruner, manifest);
-		delete_manifest_matches.push_back(matches);
+		delete_matches.push_back(matches);
 		has_matching_deletes |= matches;
 	}
-	for (auto &manifest : GetScanPlanProvider().TransactionDeleteManifests()) {
-		delete_manifests.emplace_back(delete_manifests.size(), manifest);
+	for (auto &manifest : provider.TransactionDeleteManifests()) {
+		deletes.emplace_back(deletes.size(), manifest);
 		auto matches = ManifestMayMatch(pruner, manifest.get());
-		delete_manifest_matches.push_back(matches);
+		delete_matches.push_back(matches);
 		has_matching_deletes |= matches;
 	}
+	return has_matching_deletes;
+}
+
+void IcebergScanPlanner::InitializeView(annotated_lock_guard<annotated_mutex> &guard) const {
+	if (view_initialized) {
+		return;
+	}
+	auto has_matching_deletes = CollectManifests(GetScanPlanProvider(), data_manifests, data_manifest_matches,
+	                                             delete_manifests, delete_manifest_matches);
 	has_matching_delete_manifests.store(has_matching_deletes);
 	view_initialized = true;
 }
@@ -334,10 +341,24 @@ unique_ptr<NodeStatistics> IcebergScanPlanner::GetCardinality() const {
 		return nullptr;
 	}
 	annotated_lock_guard<annotated_mutex> guard(shared_state->lock);
-	InitializeView(guard);
-	auto cardinality =
-	    IcebergScanStatistics(data_manifests, data_manifest_matches, delete_manifests, delete_manifest_matches)
-	        .EstimateCardinality();
+	optional<idx_t> cardinality;
+	if (view_initialized || shared_state->HasScanPlanProvider()) {
+		InitializeView(guard);
+		cardinality =
+		    IcebergScanStatistics(data_manifests, data_manifest_matches, delete_manifests, delete_manifest_matches)
+		        .EstimateCardinality();
+	} else {
+		// Don't choose how the scan is planned yet: a query can still require row ids or sequence numbers after
+		// binding. Count from the manifest list instead, which client-side planning reuses.
+		if (shared_state->MayPlanServerSide()) {
+			return nullptr;
+		}
+		ClientSideScanPlanProvider manifest_list(*shared_state, shared_state->CreatePlanContext());
+		vector<BoundIcebergManifestListEntry> data, deletes;
+		vector<bool> data_matches, delete_matches;
+		CollectManifests(manifest_list, data, data_matches, deletes, delete_matches);
+		cardinality = IcebergScanStatistics(data, data_matches, deletes, delete_matches).EstimateCardinality();
+	}
 	if (!cardinality) {
 		return nullptr;
 	}

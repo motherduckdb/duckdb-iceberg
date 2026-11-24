@@ -37,7 +37,37 @@ static ScanPlanningMode GetScanPlanningMode(optional_ptr<IcebergTableSchemaVersi
 	throw InvalidConfigurationException("Table's config 'scan-planning-mode' has unrecognized option: %s", mode);
 }
 
+static ScanPlanningMode GetEffectiveScanPlanningMode(ClientContext &context,
+                                                     optional_ptr<IcebergTableSchemaVersion> table) {
+	auto scan_planning_mode = GetScanPlanningMode(table);
+	if (scan_planning_mode == ScanPlanningMode::UNSPECIFIED) {
+		Value value;
+		if (context.TryGetCurrentSetting("iceberg_use_server_side_scan_planning", value) && !value.IsNull() &&
+		    value.type().id() == LogicalTypeId::BOOLEAN && !value.GetValue<bool>()) {
+			scan_planning_mode = ScanPlanningMode::CLIENT_SIDE_ONLY;
+		}
+	}
+	return scan_planning_mode;
+}
+
 } // namespace
+
+bool IcebergScanPlanProvider::MayPlanServerSide(ClientContext &context, const IcebergSnapshotScanInfo &snapshot,
+                                                optional_ptr<IcebergTableSchemaVersion> table_entry,
+                                                bool has_transaction_data, bool server_side_planning_enabled) {
+	if (!snapshot.snapshot) {
+		return false;
+	}
+	auto scan_planning_mode = GetEffectiveScanPlanningMode(context, table_entry);
+	if (scan_planning_mode == ScanPlanningMode::SERVER_SIDE_ONLY) {
+		return true;
+	}
+	if (!server_side_planning_enabled || !table_entry || has_transaction_data || table_entry->table_info.IsRenamed() ||
+	    scan_planning_mode == ScanPlanningMode::CLIENT_SIDE_ONLY) {
+		return false;
+	}
+	return table_entry->table_info.catalog.supported_urls.count(IcebergServerSideScanPlanning::PLAN_ENDPOINT) > 0;
+}
 
 unique_ptr<IcebergScanPlanProvider> IcebergScanPlanProvider::Create(IcebergScanPlanState &shared_state,
                                                                     IcebergScanPlanContext context,
@@ -49,14 +79,7 @@ unique_ptr<IcebergScanPlanProvider> IcebergScanPlanProvider::Create(IcebergScanP
 		return make_uniq<ClientSideScanPlanProvider>(shared_state, context);
 	}
 
-	auto scan_planning_mode = GetScanPlanningMode(table_entry);
-	if (scan_planning_mode == ScanPlanningMode::UNSPECIFIED) {
-		Value value;
-		if (context.context.TryGetCurrentSetting("iceberg_use_server_side_scan_planning", value) && !value.IsNull() &&
-		    value.type().id() == LogicalTypeId::BOOLEAN && !value.GetValue<bool>()) {
-			scan_planning_mode = ScanPlanningMode::CLIENT_SIDE_ONLY;
-		}
-	}
+	auto scan_planning_mode = GetEffectiveScanPlanningMode(context.context, table_entry);
 	if (!table_entry || context.transaction_data || table_entry->table_info.IsRenamed() ||
 	    scan_planning_mode == ScanPlanningMode::CLIENT_SIDE_ONLY) {
 		server_side_planning_enabled = false;
