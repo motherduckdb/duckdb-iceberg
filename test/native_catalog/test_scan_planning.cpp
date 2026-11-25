@@ -2197,6 +2197,93 @@ TEST_CASE("Iceberg missing variant metrics do not hide another column's non-matc
 	}
 }
 
+// A scan can be estimated, and so planned, before the query that reads it asks for the row lineage columns. Those
+// requests cannot change a plan the scan made from its own manifests, so they are still accepted.
+TEST_CASE("Iceberg row lineage requests after a client-side cardinality estimate", "[iceberg_planning]") {
+	PlanningTest test;
+	Query(test.connection, "CREATE TABLE lake.default.t (id INTEGER) WITH ('format-version'=3)");
+	Query(test.connection, "INSERT INTO lake.default.t VALUES (1), (2), (3)");
+	Query(test.connection, "INSERT INTO lake.default.t VALUES (4), (5)");
+	auto bound = test.Bind();
+	auto &planner = bound->Cast<MultiFileBindData>().file_list->Cast<IcebergMultiFileList>().GetScanPlanner();
+
+	auto cardinality = planner.GetCardinality();
+	REQUIRE(cardinality);
+	REQUIRE(cardinality->estimated_cardinality == 5);
+
+	REQUIRE_NOTHROW(planner.RequireRowIds());
+	REQUIRE_NOTHROW(planner.DisableServerSidePlanning());
+	// A repeated request, as a prepared statement makes on every EXECUTE
+	REQUIRE_NOTHROW(planner.RequireRowIds());
+	REQUIRE_NOTHROW(planner.DisableServerSidePlanning());
+
+	// The scan keeps the plan of the estimate
+	REQUIRE(planner.GetTotalFileCount() == 2);
+	REQUIRE(planner.GetCardinality()->estimated_cardinality == 5);
+}
+
+TEST_CASE("Iceberg row lineage requests after a view froze the configuration", "[iceberg_planning]") {
+	PlanningTest test;
+	Query(test.connection, "CREATE TABLE lake.default.t (id INTEGER) WITH ('format-version'=3)");
+	Query(test.connection, "INSERT INTO lake.default.t VALUES (1), (2), (3)");
+	auto bound = test.Bind();
+	auto &planner = bound->Cast<MultiFileBindData>().file_list->Cast<IcebergMultiFileList>().GetScanPlanner();
+
+	// Creating a view freezes the configuration but does not choose how the scan is planned
+	auto view = planner.CreateView(IcebergTableFilters());
+	REQUIRE_NOTHROW(planner.RequireRowIds());
+	REQUIRE_NOTHROW(planner.DisableServerSidePlanning());
+	REQUIRE(view->GetTotalFileCount() == 1);
+}
+
+TEST_CASE("Iceberg scan identity stays fixed after a cardinality estimate", "[iceberg_planning]") {
+	PlanningTest test;
+	Query(test.connection, "CREATE TABLE lake.default.t (id INTEGER) WITH ('format-version'=3)");
+	Query(test.connection, "INSERT INTO lake.default.t VALUES (1)");
+	auto bound = test.Bind();
+	auto &planner = bound->Cast<MultiFileBindData>().file_list->Cast<IcebergMultiFileList>().GetScanPlanner();
+
+	REQUIRE(planner.GetCardinality());
+	auto options = planner.GetOptions();
+	REQUIRE_THROWS_AS(planner.SetOptions(options), InternalException);
+}
+
+// Needs a catalog that plans scans: make fixture-latest
+TEST_CASE("Iceberg row lineage requests after the catalog planned the scan", "[iceberg_planning]") {
+	if (!std::getenv("FIXTURE_SERVER_AVAILABLE")) {
+		WARN("Requires the iceberg-rest-fixture catalog (make fixture-latest)");
+		return;
+	}
+	DuckDB database(nullptr);
+	Connection connection(database);
+	Query(connection, "CREATE SECRET (TYPE S3, KEY_ID 'admin', SECRET 'password', ENDPOINT '127.0.0.1:9000', "
+	                  "URL_STYLE 'path', USE_SSL 0)");
+	Query(connection, "ATTACH '' AS lake (TYPE ICEBERG, CLIENT_ID 'admin', CLIENT_SECRET 'password', "
+	                  "URI 'http://127.0.0.1:8181')");
+	Query(connection, "CREATE SCHEMA IF NOT EXISTS lake.default");
+	Query(connection, "DROP TABLE IF EXISTS lake.default.planned_row_lineage");
+	Query(connection, "CREATE TABLE lake.default.planned_row_lineage (id INTEGER) WITH ('format-version'=3)");
+	Query(connection, "INSERT INTO lake.default.planned_row_lineage VALUES (1), (2), (3)");
+	Query(connection, "SET iceberg_use_server_side_scan_planning=true");
+
+	Query(connection, "BEGIN");
+	auto &context = *connection.context;
+	MetaTransaction::Get(context).SetActiveQuery(DatabaseManager::Get(context).GetNewQueryNumber());
+	EntryLookupInfo lookup(CatalogType::TABLE_ENTRY,
+	                       QualifiedName(Identifier("lake"), Identifier("default"), Identifier("planned_row_lineage")));
+	auto &entry = Catalog::GetEntry(context, lookup).Cast<IcebergTableSchemaVersion>();
+	unique_ptr<FunctionData> bound;
+	entry.GetScanFunction(context, bound, lookup);
+	auto &planner = bound->Cast<MultiFileBindData>().file_list->Cast<IcebergMultiFileList>().GetScanPlanner();
+
+	// The estimate lets the catalog plan the scan; that plan did not promise row ids
+	REQUIRE(planner.GetCardinality());
+	REQUIRE_THROWS_WITH(planner.RequireRowIds(), Catch::Contains("after the catalog planned it"));
+	REQUIRE_THROWS_WITH(planner.DisableServerSidePlanning(), Catch::Contains("after the catalog planned it"));
+	Query(connection, "ROLLBACK");
+	Query(connection, "DROP TABLE lake.default.planned_row_lineage");
+}
+
 int main(int argc, char **argv) {
 	return Catch::Session().run(argc, argv);
 }

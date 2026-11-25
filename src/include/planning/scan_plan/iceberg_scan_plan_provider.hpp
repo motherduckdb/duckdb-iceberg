@@ -24,6 +24,10 @@ public:
 	       optional_ptr<IcebergTableSchemaVersion> table_entry, const IcebergTableFilters &table_filters,
 	       const IcebergScanOrder &scan_order, bool server_side_planning_enabled);
 
+	//! Whether the catalog planned the scan. Only such a plan depends on the planning requirements.
+	virtual bool IsServerSide() const {
+		return false;
+	}
 	virtual void LoadManifestList() = 0;
 	virtual void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) = 0;
 	virtual void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) = 0;
@@ -73,6 +77,9 @@ public:
 	ServerSideScanPlanProvider(IcebergServerSideScanPlan plan, const IcebergTableMetadata &metadata,
 	                           ClientContext &context);
 
+	bool IsServerSide() const override {
+		return true;
+	}
 	void LoadManifestList() override;
 	void StartDataManifestScan(const vector<bool> &matching_manifests, idx_t filter_count) override;
 	void ReadDeleteManifests(const vector<idx_t> &manifest_indexes, idx_t filter_count) override;

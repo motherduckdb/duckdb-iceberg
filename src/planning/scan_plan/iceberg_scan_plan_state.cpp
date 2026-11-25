@@ -36,14 +36,20 @@ void IcebergScanPlanState::SetTable(IcebergTableSchemaVersion &table) {
 	configuration.table = table;
 }
 
-//! A prepared statement is planned again on every EXECUTE, with the bind data of the PREPARE. The planner hook then
-//! asks for the same restrictions a second time, after the first plan froze the configuration: a request that
-//! changes nothing is not a change.
+//! These requirements only steer IcebergScanPlanProvider::Create toward or away from the catalog's plan. A scan that
+//! is not planned yet, or is planned client-side, does not depend on them, so changing them changes nothing: neither
+//! a prepared statement that asks again on every EXECUTE, nor a query bound after an estimate planned its scan.
+void IcebergScanPlanState::RequirePlanUnaffected() const {
+	if (scan_plan_provider && scan_plan_provider->IsServerSide()) {
+		throw InternalException("Cannot change the requirements of an Iceberg scan after the catalog planned it");
+	}
+}
+
 void IcebergScanPlanState::DisableServerSidePlanning() {
 	if (!configuration.server_side_planning_enabled) {
 		return;
 	}
-	RequireConfigurable();
+	RequirePlanUnaffected();
 	configuration.server_side_planning_enabled = false;
 }
 
@@ -51,7 +57,7 @@ void IcebergScanPlanState::RequireRowIds() {
 	if (configuration.row_ids_required) {
 		return;
 	}
-	RequireConfigurable();
+	RequirePlanUnaffected();
 	configuration.row_ids_required = true;
 }
 

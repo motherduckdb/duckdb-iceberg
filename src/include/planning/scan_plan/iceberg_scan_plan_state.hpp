@@ -65,6 +65,7 @@ private:
 	mutex equality_bounds_lock;
 	unordered_map<idx_t, unordered_map<idx_t, unique_ptr<IcebergEqualityDeleteBounds>>> equality_delete_bounds;
 	void RequireConfigurable() const DUCKDB_REQUIRES(lock);
+	void RequirePlanUnaffected() const DUCKDB_REQUIRES(lock);
 	bool configuration_frozen DUCKDB_GUARDED_BY(lock) = false;
 	unique_ptr<IcebergManifestStore> manifest_store DUCKDB_GUARDED_BY(lock);
 	//! Destroy the provider before the manifest store it may reference.
