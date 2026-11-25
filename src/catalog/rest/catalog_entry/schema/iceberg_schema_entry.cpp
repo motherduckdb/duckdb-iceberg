@@ -164,6 +164,7 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool 
 		// Check if view was created in this transaction — just remove from created_views
 		if (transaction.created_views.erase(view_key) > 0) {
 			transaction.InvalidateViewEntry(view_key);
+			transaction.MarkCatalogChanged();
 			return;
 		}
 
@@ -187,6 +188,7 @@ void IcebergSchemaEntry::DropEntry(ClientContext &context, DropInfo &info, bool 
 			info.view_name = entry_name;
 			transaction.deleted_views.emplace(view_key, std::move(info));
 		}
+		transaction.MarkCatalogChanged();
 		return;
 	}
 	case CatalogType::TABLE_ENTRY: {
@@ -289,6 +291,7 @@ optional_ptr<CatalogEntry> IcebergSchemaEntry::CreateView(CatalogTransaction tra
 
 	// A DROP followed by CREATE can replace an entry already bound in this transaction.
 	iceberg_transaction.InvalidateViewEntry(view_key);
+	iceberg_transaction.MarkCatalogChanged();
 
 	// Return a pointer to an owned entry (avoid dangling pointer)
 	return tables.GetViewEntry(transaction.GetContext(), info.GetViewName().GetIdentifierName());
